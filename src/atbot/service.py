@@ -69,6 +69,17 @@ def make_handler(companion: CompanionRuntime, token: str):
                         ),
                     )
                     return
+                if self.path == "/api/companion/propose":
+                    if set(value) - {"message", "remote"}:
+                        raise ValueError("proposal extraction accepts message and remote only")
+                    self._json(
+                        200,
+                        companion.propose_memories(
+                            str(value.get("message") or ""),
+                            remote=bool(value.get("remote", False)),
+                        ),
+                    )
+                    return
                 self._json(404, {"error": "not found"})
             except (TypeError, ValueError) as exc:
                 self._json(400, {"error": str(exc)})

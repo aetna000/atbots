@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from atbot.config import AtBotConfig
+from atbot.extraction import extract_facts
 from atbot.providers.router import ModelRouter
 
 
@@ -38,7 +39,7 @@ class CompanionRuntime:
                 "eligible_candidate_query": True,
                 "reranking": True,
                 "query_expansion": True,
-                "proposal_extraction": False,
+                "proposal_extraction": True,
             },
             "providers": self.router.status(),
         }
@@ -72,6 +73,43 @@ class CompanionRuntime:
             "content_received": False,
             "provider": "atbot-policy",
             "model": "query-concepts-v1",
+        }
+
+    def propose_memories(self, message: str, *, remote: bool = False) -> dict[str, object]:
+        """Interpret one source message without storing or authorizing anything."""
+        clean = " ".join(message.split())
+        if not clean:
+            raise ValueError("message is required")
+        if len(clean) > 20_000:
+            raise ValueError("message is too large")
+        provider = self.router.select(sensitivity="personal", remote=remote)
+        facts = extract_facts(provider, clean)
+        return {
+            "format": "atbot-memory-proposals-v1",
+            "proposals": [
+                {
+                    "fact": fact.fact,
+                    "fact_key": fact.fact_key,
+                    "confidence": fact.confidence,
+                    "sensitivity": fact.sensitivity,
+                    "entities": list(fact.entities),
+                    "suggested_action": fact.suggested_action,
+                    # AtBot did not receive eligible records on this endpoint,
+                    # so it cannot create record relationships here.
+                    "related_record_ids": [],
+                }
+                for fact in facts
+            ],
+            "interpreter": {
+                "provider": provider.name,
+                "model": provider.model,
+                "prompt_version": "atbot-extract-v1",
+                "assurance": "model_interpreted",
+                "egress_class": provider.egress_class,
+            },
+            "content_received": True,
+            "authority_decision": None,
+            "canonical_storage": False,
         }
 
     def answer_query(
