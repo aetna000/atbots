@@ -1,45 +1,57 @@
-# AtBot architecture
+# AtBot companion architecture
+
+AtBot is AtMem's model-backed intelligence component, not an independent
+product agent.
+
+```text
+OpenClaw, Hermes, or another agent
+            <-> agent-specific adapter
+            <-> AtMem authority and storage
+            <-> AtBot intelligence companion
+```
 
 ## Responsibility split
 
-```text
-Users and agent runtimes
-          |
-          v
-AtBot task runtime or shared memory centre
-          |
-          v
-Tools, skills, inference and retrieval orchestration
-          |
-          v
-AtMem public APIs and control contracts
-          |
-          v
-Canonical memory, provenance, policy and evidence
-```
+- AtBot proposes facts, entities, relationships, query expansions, rankings,
+  and maintenance actions.
+- AtMem authorizes, stores, retrieves, revalidates, injects, audits, corrects,
+  and forgets.
+- Adapters authenticate host events and deliver AtMem-authorized context.
+- The host agent remains responsible for general conversation and tasks.
 
-AtBot is independently deployable, but AtMem is its only authoritative memory
-store. Derived model output remains a proposal until AtMem admits it under the
-configured policy.
+> AtBot proposes and ranks; AtMem authorizes and stores.
 
-## Planned packages
+AtBot sees memory content only after AtMem candidate eligibility. Returned
+rankings may contain only IDs from the immutable eligible candidate set. AtMem
+revalidates every selection before producing byte-stable context.
 
-- `agent`: independent general-purpose task-agent runtime
-- `memory_centre`: capture, inference, recall, and service orchestration for
-  other agents
-- `adapters`: runtime hooks for supported agent hosts
-- `extraction`: context assembly and model-backed memory proposals
-- `providers`: local and remote inference providers
-- `retrieval`: governed search fusion, reranking, and context construction
-- `skills`: memory operating procedures exposed to agents
-- `tools`: typed agent and operator tools
-- `workers`: consolidation, contradiction review, and maintenance
+## Product interface
 
-## Non-negotiable invariants
+The AtMem dashboard is the only customer interface. It contains a chat-style
+governed-memory query surface and keeps all authority controls, including
+shadow mode, agent topology, review, provenance, correction, forgetting,
+storage, vectors, audit, restore, and OpenClaw bridge verification.
 
-1. Other agents cannot mutate canonical storage directly.
-2. Model inference cannot approve its own memory proposals.
-3. Every active memory remains linked to source evidence.
-4. Retrieval is scoped before ranking.
-5. Context injection is authorized and receipted by AtMem.
-6. Forgetting reaches every AtBot-owned derived representation.
+The AtBot loopback service is a headless companion protocol endpoint. It has no
+separate customer dashboard and no independent canonical database.
+
+## Runtime packages
+
+- `providers`: local-first Pydantic AI model adapters and deterministic fallback.
+- `extraction`: strict fact, entity, relationship, and sensitivity proposals.
+- `prompts`: stable companion prompts and cache identity.
+- `runtime`: bounded memory inference and ranking orchestration.
+- `capabilities`: internal hooks, policies, tools, skills, and guardrails used
+  only for memory work.
+- `service`: companion health, inference, query-expansion, and ranking protocol.
+- `gateway`: development/conformance client for AtMem public contracts; AtMem
+  remains the only durable authority.
+
+The old independent task loop may remain temporarily as unexposed internal
+code during migration, but it is not a supported CLI mode or product surface.
+
+## Failure behavior
+
+When AtBot is unavailable, AtMem continues with deterministic extraction and
+lexical, graph, and local-vector ranking. Failure reduces intelligence and
+never weakens scope, sensitivity, egress, lifecycle, or audit policy.
