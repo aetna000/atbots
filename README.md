@@ -40,3 +40,11 @@ python -m pytest -q atbot/tests
 
 See [the companion specification](research/research.md) and
 [architecture](docs/architecture.md).
+
+## License
+
+AtBot is licensed under the [Apache License 2.0](LICENSE). It permits
+commercial and internal enterprise use, modification, and distribution,
+subject to the license terms. Apache-2.0 also provides an explicit contributor
+patent grant and does not require an organization to publish private changes
+merely because it runs the software as a service.
