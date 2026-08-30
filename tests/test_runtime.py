@@ -106,3 +106,23 @@ def test_query_expansion_is_content_free_and_bounded(tmp_path: Path) -> None:
     assert result["content_received"] is False
     assert "food preference" in result["expanded_queries"]
     assert len(result["expanded_queries"]) <= 6
+
+
+def test_companion_proposes_but_never_admits_or_stores(tmp_path: Path) -> None:
+    memory_path = tmp_path / "must-not-exist.db"
+    companion = CompanionRuntime(config_for(memory_path))
+
+    result = companion.propose_memories("I prefer window seats")
+
+    assert result["format"] == "atbot-memory-proposals-v1"
+    assert result["proposals"][0]["fact"] == "I prefer window seats"
+    assert result["authority_decision"] is None
+    assert result["canonical_storage"] is False
+    assert result["proposals"][0]["related_record_ids"] == []
+    assert not memory_path.exists()
+
+
+def test_companion_does_not_propose_questions(tmp_path: Path) -> None:
+    companion = CompanionRuntime(config_for(tmp_path / "unused.db"))
+    result = companion.propose_memories("What food do I prefer?")
+    assert result["proposals"] == []
