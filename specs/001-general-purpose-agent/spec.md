@@ -1,6 +1,6 @@
 # Feature Specification: AtBots — General-Purpose Agent Package
 
-**Feature Branch**: `002-general-purpose-agent`
+**Feature Branch**: `001-general-purpose-agent`
 
 **Created**: 2026-09-05
 

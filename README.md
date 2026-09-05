@@ -153,10 +153,9 @@ Product behavior is specified first; implementation follows those artifacts.
 | Artifact | Path |
 |----------|------|
 | Constitution | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) |
-| Feature spec | [`specs/002-general-purpose-agent/spec.md`](specs/002-general-purpose-agent/spec.md) |
+| Feature spec | [`specs/001-general-purpose-agent/spec.md`](specs/001-general-purpose-agent/spec.md) |
 
-Grok Build skills live in [`.grok/skills/`](.grok/skills). From the project
-directory:
+The specification follows this workflow:
 
 1. `/speckit-constitution` — project principles (ratified, v3.0.0)
 2. `/speckit-specify` — what to build
@@ -168,12 +167,11 @@ directory:
 8. `/speckit-implement` — execute remaining tasks
 9. `/speckit-converge` — close gaps against spec, plan, and tasks
 
-The git extension creates numbered feature branches (`002-…`). Active feature
+The git extension creates numbered feature branches (`001-…`). Active feature
 state is [`.specify/feature.json`](.specify/feature.json), not the checked-out
 branch alone.
 
-Requires the Specify CLI (`uv tool install specify-cli`). Integration: Grok
-Build (`specify init --here --integration grok`).
+Requires the Specify CLI (`uv tool install specify-cli`).
 
 ## Development
 
