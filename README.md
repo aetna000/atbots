@@ -16,8 +16,8 @@ worker, or the intelligence layer for any other product.
 | Pillar | What it gives you |
 |--------|-------------------|
 | **Tasks** | Named, reusable units of work with declared inputs and typed results. Run them from code or the CLI; inspect what ran. |
-| **Skills** | `SKILL.md` directories the agent discovers and applies on demand. Extend the agent by writing documents, not code. |
-| **Memory** | A pluggable provider interface. A local default works out of the box; any backend that implements the interface is equally supported. |
+| **Skills** | `SKILL.md` directories declared in configuration and discovered when `TaskAgent` starts. |
+| **Memory** | Local governed memory stored by the bundled AtMem backend. |
 
 ## Thin layer, on purpose
 
@@ -39,25 +39,111 @@ endpoint and credentials — installing AtBots never downloads a large model or
 creates an API key on your behalf. Switching providers is a configuration
 change; tasks, skills, and tools are untouched.
 
+## Configuration directory
+
+New installations keep user configuration and local state in `~/.atbots/`:
+
+```text
+~/.atbots/
+├── config.json
+├── atmem.db
+└── skills/
+    └── example-skill/
+        └── SKILL.md
+```
+
+Earlier development builds used `~/.atbot/` because the project originally had
+the singular name AtBot. AtBots now uses the plural `~/.atbots/` path to match
+the package and command. Existing `~/.atbot/config.json` files remain readable
+for compatibility; run `atbots init --force` to create a new plural-path config.
+
+## Adding skills
+
+Create one directory per skill. Each skill must contain a file named exactly
+`SKILL.md`:
+
+```bash
+mkdir -p ~/.atbots/skills/code-review
+```
+
+```markdown
+# Code review
+
+Review changes for correctness, security, and missing tests.
+```
+
+Save that Markdown as `~/.atbots/skills/code-review/SKILL.md`, then add the
+skills root to `~/.atbots/config.json`:
+
+```json
+{
+  "skill_directories": ["~/.atbots/skills"]
+}
+```
+
+AtBots scans `<skills-root>/<skill-name>/SKILL.md` when `TaskAgent` is created.
+In `0.1.0a1`, the task runtime discovers skill names, but the installed
+`atbots serve` companion does not yet execute skill instructions. Full skill
+instruction injection is tracked by the general-purpose-agent specification.
+
+## Adding tools
+
+Tools are Python callables registered on a `TaskAgent`. A tool must also appear
+in `allowed_tools`; registration alone does not grant permission to run it:
+
+```python
+from atbots.agent import TaskAgent
+from atbots.capabilities import Tool
+from atbots.config import AtBotConfig
+
+config = AtBotConfig(allowed_tools=["memory_recall", "get_weather"])
+agent = TaskAgent(config)
+agent.tools.register(
+    Tool(
+        name="get_weather",
+        description="Get the current weather for a city.",
+        input_schema={
+            "type": "object",
+            "required": ["city"],
+            "properties": {"city": {"type": "string"}},
+        },
+        handler=lambda arguments: {"city": arguments["city"], "temperature": 22},
+    )
+)
+
+result = agent.run("What is the weather in Sydney?")
+print(result.answer)
+```
+
+The built-in `memory_recall` tool is registered automatically. Custom tool
+registration is currently a Python API; there is no drop-in tools directory.
+
 ## Configuring memory
 
-Memory is a **port, not a vendor**. Core `atbots` depends on no third-party
-memory product. It defines a provider interface — store and recall, sync and
-async — and ships a local default so a fresh install works immediately.
+The current alpha uses AtMem as its memory backend. By default it stores memory
+in `~/.atbots/atmem.db`. Change `memory_path` in `~/.atbots/config.json` to use
+another local database file:
 
-Point it anywhere by satisfying that interface:
+```json
+{
+  "memory_path": "/absolute/path/to/my-memory.db"
+}
+```
 
-- the **built-in default** — local, no account, no external service;
-- **mem0**, **AtMem**, or another hosted or self-hosted memory service;
-- a **vector store** you already run;
-- **your own class**, if none of the above fit.
+You can also configure identity boundaries with `subject_id`, `agent_id`, and
+`workspace_id`. These values determine which governed memories the runtime can
+read and write. The default values are suitable for one local user:
 
-Swapping backends changes configuration only. Your task, skill, and tool code
-does not change. Backends that need an extra dependency install as extras and
-fail with a clear message naming the missing package if it isn't present.
+```json
+{
+  "subject_id": "local-user",
+  "agent_id": "atbot-main",
+  "workspace_id": "private"
+}
+```
 
-<!-- Backend-specific setup snippets land here once the provider interface is
-     implemented; see specs/002-general-purpose-agent/spec.md. -->
+Support for interchangeable memory providers such as mem0 and custom classes is
+planned, but is not implemented in `0.1.0a1`.
 
 ## Spec-driven development
 

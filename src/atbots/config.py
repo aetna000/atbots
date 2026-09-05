@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_ROOT = Path.home() / ".atbot"
+DEFAULT_ROOT = Path.home() / ".atbots"
 DEFAULT_CONFIG = DEFAULT_ROOT / "config.json"
+LEGACY_DEFAULT_CONFIG = Path.home() / ".atbot" / "config.json"
 
 
 @dataclass(slots=True)
@@ -63,6 +64,8 @@ class AtBotConfig:
 
 def load_config(path: str | Path = DEFAULT_CONFIG) -> AtBotConfig:
     source = Path(path).expanduser()
+    if source == DEFAULT_CONFIG and not source.is_file() and LEGACY_DEFAULT_CONFIG.is_file():
+        source = LEGACY_DEFAULT_CONFIG
     if not source.is_file():
         raise FileNotFoundError(
             f"AtBots is not configured: {source}. Run `atbots init` first."
