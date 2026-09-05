@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from atbots.config import AtBotConfig
+from atbots.config import DEFAULT_CONFIG, DEFAULT_ROOT, AtBotConfig, load_config
 from atbots.gateway import AtMemGateway
 from atbots.runtime import AtBotRuntime
 from atbots.agent import TaskAgent
@@ -11,6 +11,18 @@ from atbots.companion import CompanionRuntime
 
 def config_for(path: Path) -> AtBotConfig:
     return AtBotConfig(memory_path=str(path), providers=[])
+
+
+def test_default_state_directory_uses_plural_package_name() -> None:
+    assert DEFAULT_ROOT.name == ".atbots"
+    assert DEFAULT_CONFIG == DEFAULT_ROOT / "config.json"
+
+
+def test_explicit_legacy_config_remains_readable(tmp_path: Path) -> None:
+    legacy = tmp_path / ".atbot" / "config.json"
+    legacy.parent.mkdir()
+    legacy.write_text('{"format":"atbot-config-v1","subject_id":"legacy"}')
+    assert load_config(legacy).subject_id == "legacy"
 
 
 def test_initialize_always_creates_vector_store(tmp_path: Path) -> None:
