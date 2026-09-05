@@ -118,6 +118,74 @@ print(result.answer)
 The built-in `memory_recall` tool is registered automatically. Custom tool
 registration is currently a Python API; there is no drop-in tools directory.
 
+## Adding hooks
+
+Hooks observe task lifecycle events. Register a synchronous handler on the
+agent before calling `run`:
+
+```python
+from atbots.agent import TaskAgent
+from atbots.config import AtBotConfig
+
+agent = TaskAgent(AtBotConfig())
+
+def report_event(event: str, payload: dict[str, object]) -> None:
+    print(event, payload)
+
+agent.hooks.add(report_event)
+result = agent.run("Summarize what you remember")
+```
+
+The current task loop emits `task.started`, `tool.completed`, `task.finished`,
+and `task.stopped`. Payloads contain trace metadata such as run IDs, step
+numbers, and tool names; they do not contain memory or tool-result content.
+There is currently no hooks directory or configuration-file hook loader.
+
+## Guardrails
+
+Guardrails are enforced in code around tool and model execution:
+
+- `allowed_tools` is an allowlist. A registered tool cannot run unless its name
+  is also present in the configuration.
+- Tools declared with `destructive=True` are rejected by the current runtime.
+  A separate approval mechanism is planned but not implemented yet.
+- Tool results are JSON-serialized and truncated to 20,000 characters before
+  they are returned to the model.
+- `max_task_steps` limits the task loop to eight steps by default.
+- Remote providers require both `remote=True` on the operation and
+  `remote_egress_allowed=true` in configuration. Sensitive and restricted
+  content is never routed remotely.
+- The companion HTTP server only binds to a loopback address and requires the
+  session CSRF token for write requests.
+
+These are built-in controls. There is currently no drop-in `guardrails/`
+directory or custom guardrail registration API.
+
+## Rules and policy
+
+Runtime rules currently come from three places:
+
+1. `~/.atbots/config.json` sets limits and permissions such as `allowed_tools`,
+   `max_task_steps`, and `remote_egress_allowed`.
+2. System prompts in `atbots.prompts` and the task runtime define model
+   behavior.
+3. Python policy checks in the tool registry, provider router, memory gateway,
+   and companion enforce boundaries that the model cannot override.
+
+For example:
+
+```json
+{
+  "allowed_tools": ["memory_recall", "get_weather"],
+  "max_task_steps": 6,
+  "remote_egress_allowed": false
+}
+```
+
+There is currently no `RULES.md` convention or rules directory. Use a skill for
+reusable instructions and configuration or Python checks for boundaries that
+must always be enforced.
+
 ## Configuring memory
 
 The current alpha uses AtMem as its memory backend. By default it stores memory
