@@ -82,7 +82,7 @@ skills root to `~/.atbots/config.json`:
 ```
 
 AtBots scans `<skills-root>/<skill-name>/SKILL.md` when `TaskAgent` is created.
-In `0.1.0b1`, the task runtime discovers skill names, but the installed
+In `0.1.0`, the task runtime discovers skill names, but the installed
 `atbots serve` companion does not yet execute skill instructions. Full skill
 instruction injection is tracked by the general-purpose-agent specification.
 
@@ -212,7 +212,7 @@ size-limited, and the HTTP companion only binds to loopback.
 
 ## Configuring memory
 
-The current alpha uses AtMem as its memory backend. By default it stores memory
+The current release uses AtMem as its memory backend. By default it stores memory
 in `~/.atbots/atmem.db`. Change `memory_path` in `~/.atbots/config.json` to use
 another local database file:
 
@@ -235,7 +235,7 @@ read and write. The default values are suitable for one local user:
 ```
 
 Support for interchangeable memory providers such as mem0 and custom classes is
-planned, but is not implemented in `0.1.0b1`.
+planned, but is not implemented in `0.1.0`.
 
 ## Spec-driven development
 
