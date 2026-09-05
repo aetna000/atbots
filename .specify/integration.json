@@ -1,15 +1,8 @@
 {
   "version": "1.0.4",
   "integration_state_schema": 1,
-  "installed_integrations": [
-    "grok"
-  ],
-  "integration_settings": {
-    "grok": {
-      "script": "sh",
-      "invoke_separator": "-"
-    }
-  },
-  "integration": "grok",
-  "default_integration": "grok"
+  "installed_integrations": ["speckit"],
+  "integration_settings": {},
+  "integration": "speckit",
+  "default_integration": "speckit"
 }

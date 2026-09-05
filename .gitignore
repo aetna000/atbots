@@ -10,8 +10,3 @@ dist/
 .env.*
 !.env.example
 .DS_Store
-
-# Grok local/runtime files; keep committed Spec Kit skills
-.grok/*
-!.grok/skills/
-!.grok/skills/**
