@@ -1,4 +1,4 @@
-from atbot import __version__
+from atbots import __version__
 
 
 def test_package_version() -> None:
