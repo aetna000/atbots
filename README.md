@@ -82,7 +82,7 @@ skills root to `~/.atbots/config.json`:
 ```
 
 AtBots scans `<skills-root>/<skill-name>/SKILL.md` when `TaskAgent` is created.
-In `0.1.0a1`, the task runtime discovers skill names, but the installed
+In `0.1.0b1`, the task runtime discovers skill names, but the installed
 `atbots serve` companion does not yet execute skill instructions. Full skill
 instruction injection is tracked by the general-purpose-agent specification.
 
@@ -235,7 +235,7 @@ read and write. The default values are suitable for one local user:
 ```
 
 Support for interchangeable memory providers such as mem0 and custom classes is
-planned, but is not implemented in `0.1.0a1`.
+planned, but is not implemented in `0.1.0b1`.
 
 ## Spec-driven development
 
