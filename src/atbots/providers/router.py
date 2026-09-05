@@ -21,6 +21,7 @@ class ModelRouter:
                         endpoint=row.endpoint,
                         api_key_env=row.api_key_env,
                         egress_class=row.egress_class,
+                        capability_refs=config.pydantic_capabilities,
                     )
                 )
         self._providers.append(DeterministicLocalProvider())

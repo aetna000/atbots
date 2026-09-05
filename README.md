@@ -118,73 +118,97 @@ print(result.answer)
 The built-in `memory_recall` tool is registered automatically. Custom tool
 registration is currently a Python API; there is no drop-in tools directory.
 
-## Adding hooks
+## Configuring rules, guardrails, hooks, and Pydantic AI tools
 
-Hooks observe task lifecycle events. Register a synchronous handler on the
-agent before calling `run`:
+AtBots can load native Pydantic AI capabilities from Python modules or files.
+A capability can bundle instructions and tools; Pydantic AI `Hooks` can enforce
+guardrails and observe or modify every stage of a model run.
+
+Create `~/.atbots/capabilities/project_policy.py`:
 
 ```python
-from atbots.agent import TaskAgent
-from atbots.config import AtBotConfig
+from typing import Any
 
-agent = TaskAgent(AtBotConfig())
+from pydantic_ai import RunContext
+from pydantic_ai.capabilities import Capability, Hooks
+from pydantic_ai.exceptions import ToolFailed
 
-def report_event(event: str, payload: dict[str, object]) -> None:
-    print(event, payload)
 
-agent.hooks.add(report_event)
-result = agent.run("Summarize what you remember")
+project_rules = Capability(
+    id="project-rules",
+    instructions=(
+        "Keep answers concise. Never claim that a task succeeded without a "
+        "tool result proving it."
+    ),
+)
+
+
+@project_rules.tool_plain
+def project_status(project: str) -> dict[str, str]:
+    """Return the status of a project."""
+    return {"project": project, "status": "active"}
+
+
+safety_hooks = Hooks(id="project-safety")
+
+
+@safety_hooks.on.before_run
+async def log_run(ctx: RunContext[Any]) -> None:
+    print("AtBots run started")
+
+
+@safety_hooks.on.before_tool_execute
+async def block_production_deletes(
+    ctx: RunContext[Any],
+    *,
+    call: Any,
+    tool_def: Any,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    if tool_def.name == "delete_record" and args.get("environment") == "production":
+        raise ToolFailed("Deleting production records is forbidden by project policy.")
+    return args
 ```
 
-The current task loop emits `task.started`, `tool.completed`, `task.finished`,
-and `task.stopped`. Payloads contain trace metadata such as run IDs, step
-numbers, and tool names; they do not contain memory or tool-result content.
-There is currently no hooks directory or configuration-file hook loader.
-
-## Guardrails
-
-Guardrails are enforced in code around tool and model execution:
-
-- `allowed_tools` is an allowlist. A registered tool cannot run unless its name
-  is also present in the configuration.
-- Tools declared with `destructive=True` are rejected by the current runtime.
-  A separate approval mechanism is planned but not implemented yet.
-- Tool results are JSON-serialized and truncated to 20,000 characters before
-  they are returned to the model.
-- `max_task_steps` limits the task loop to eight steps by default.
-- Remote providers require both `remote=True` on the operation and
-  `remote_egress_allowed=true` in configuration. Sensitive and restricted
-  content is never routed remotely.
-- The companion HTTP server only binds to a loopback address and requires the
-  session CSRF token for write requests.
-
-These are built-in controls. There is currently no drop-in `guardrails/`
-directory or custom guardrail registration API.
-
-## Rules and policy
-
-Runtime rules currently come from three places:
-
-1. `~/.atbots/config.json` sets limits and permissions such as `allowed_tools`,
-   `max_task_steps`, and `remote_egress_allowed`.
-2. System prompts in `atbots.prompts` and the task runtime define model
-   behavior.
-3. Python policy checks in the tool registry, provider router, memory gateway,
-   and companion enforce boundaries that the model cannot override.
-
-For example:
+Reference the exported capability objects in `~/.atbots/config.json`:
 
 ```json
 {
-  "allowed_tools": ["memory_recall", "get_weather"],
-  "max_task_steps": 6,
-  "remote_egress_allowed": false
+  "pydantic_capabilities": [
+    "~/.atbots/capabilities/project_policy.py:project_rules",
+    "~/.atbots/capabilities/project_policy.py:safety_hooks"
+  ]
 }
 ```
 
-There is currently no `RULES.md` convention or rules directory. Use a skill for
-reusable instructions and configuration or Python checks for boundaries that
-must always be enforced.
+Installed Python modules work too:
+
+```json
+{
+  "pydantic_capabilities": [
+    "my_agent_policy:rules",
+    "my_agent_policy:guardrails"
+  ]
+}
+```
+
+Each reference must resolve to a Pydantic AI `Capability`, `Hooks`, or another
+`AbstractCapability` instance. AtBots passes them through the native
+`capabilities=` argument whenever it creates a Pydantic AI agent. This gives
+extensions access to native instructions, function tools, toolsets, model and
+tool hooks, output validation hooks, deferred approval, and capability events.
+Invalid references stop the run with a clear configuration error.
+
+AtBots also retains its own outer task lifecycle hooks. Register these directly
+with `agent.hooks.add(handler)` to receive `task.started`, `tool.completed`,
+`task.finished`, and `task.stopped`. The configured Pydantic AI hooks operate
+inside each model run and provide the finer-grained control intended for user
+guardrails.
+
+Built-in boundaries remain active around extensions: `allowed_tools` limits
+AtBots' outer task tools, `max_task_steps` bounds its task loop, remote egress
+requires explicit permission, sensitive content is kept local, tool results are
+size-limited, and the HTTP companion only binds to loopback.
 
 ## Configuring memory
 
