@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from atbot.config import AtBotConfig
-from atbot.gateway import AtMemGateway
-from atbot.runtime import AtBotRuntime
-from atbot.agent import TaskAgent
-from atbot.companion import CompanionRuntime
+from atbots.config import AtBotConfig
+from atbots.gateway import AtMemGateway
+from atbots.runtime import AtBotRuntime
+from atbots.agent import TaskAgent
+from atbots.companion import CompanionRuntime
 
 
 def config_for(path: Path) -> AtBotConfig:

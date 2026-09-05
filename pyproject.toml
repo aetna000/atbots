@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "atbot"
+name = "atbots"
 version = "0.1.0a1"
-description = "The local-first intelligence companion for AtMem."
+description = "Pydantic AI, already set up: a general-purpose agent with tasks, skills, and pluggable memory."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-atbot = "atbot.cli:main"
+atbots = "atbots.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
