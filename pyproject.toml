@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atbots"
-version = "0.1.0b1"
+version = "0.1.0"
 description = "Pydantic AI, already set up: a general-purpose agent with tasks, skills, and pluggable memory."
 readme = "README.md"
 requires-python = ">=3.10"
