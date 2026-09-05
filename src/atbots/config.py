@@ -38,6 +38,7 @@ class AtBotConfig:
     max_task_steps: int = 8
     allowed_tools: list[str] = field(default_factory=lambda: ["memory_recall"])
     skill_directories: list[str] = field(default_factory=list)
+    pydantic_capabilities: list[str] = field(default_factory=list)
     providers: list[ProviderConfig] = field(default_factory=lambda: [ProviderConfig()])
 
     @property

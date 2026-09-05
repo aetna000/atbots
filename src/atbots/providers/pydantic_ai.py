@@ -10,6 +10,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from atbots.domain import ProviderResult
+from atbots.extensions import load_pydantic_capabilities
 
 
 class PydanticAIProvider:
@@ -21,6 +22,7 @@ class PydanticAIProvider:
         endpoint: str,
         api_key_env: str | None = None,
         egress_class: str = "local",
+        capability_refs: list[str] | None = None,
     ) -> None:
         if not endpoint.startswith(("http://127.0.0.1", "http://localhost", "https://")):
             raise ValueError("provider endpoint must be loopback HTTP or HTTPS")
@@ -29,6 +31,7 @@ class PydanticAIProvider:
         self.endpoint = endpoint.rstrip("/")
         self.api_key_env = api_key_env
         self.egress_class = egress_class
+        self.capability_refs = list(capability_refs or [])
 
     @property
     def api_base(self) -> str:
@@ -74,6 +77,7 @@ class PydanticAIProvider:
             model,
             system_prompt=system + schema_instruction,
             model_settings={"temperature": 0},
+            capabilities=load_pydantic_capabilities(self.capability_refs),
         )
         result = agent.run_sync(prompt)
         text = str(result.output)
