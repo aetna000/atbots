@@ -1,0 +1,98 @@
+{
+  "model": "qwen3:1.7b",
+  "repeat": 2,
+  "scenarios": {
+    "recovers_from_invented_tool": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 1.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 1.0
+      },
+      "mean_recoveries": 2.0,
+      "mean_steps": 4.0,
+      "peak_prompt_chars": 760,
+      "runs": 2,
+      "success_rate": 1.0
+    },
+    "recovers_from_malformed_steps": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 1.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 1.0
+      },
+      "mean_recoveries": 1.0,
+      "mean_steps": 3.0,
+      "peak_prompt_chars": 542,
+      "runs": 2,
+      "success_rate": 1.0
+    },
+    "recovers_from_repeat": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 0.5,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 0.5
+      },
+      "mean_recoveries": 0.5,
+      "mean_steps": 2.0,
+      "peak_prompt_chars": 587,
+      "runs": 2,
+      "success_rate": 0.5
+    },
+    "single_tool": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 1.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 1.0
+      },
+      "mean_recoveries": 2.0,
+      "mean_steps": 4.0,
+      "peak_prompt_chars": 760,
+      "runs": 2,
+      "success_rate": 1.0
+    },
+    "survives_failing_tool": {
+      "assertion_rates": {
+        "Completed": 0.0,
+        "Grounded": 0.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 1.0
+      },
+      "mean_recoveries": 6.0,
+      "mean_steps": 6.0,
+      "peak_prompt_chars": 752,
+      "runs": 2,
+      "success_rate": 0.0
+    },
+    "survives_oversized_result": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 1.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 1.0
+      },
+      "mean_recoveries": 0.0,
+      "mean_steps": 2.0,
+      "peak_prompt_chars": 2418,
+      "runs": 2,
+      "success_rate": 1.0
+    },
+    "two_tools": {
+      "assertion_rates": {
+        "Completed": 1.0,
+        "Grounded": 0.0,
+        "NoFabrication": 1.0,
+        "ToolCoverage": 0.0
+      },
+      "mean_recoveries": 1.0,
+      "mean_steps": 3.0,
+      "peak_prompt_chars": 742,
+      "runs": 2,
+      "success_rate": 0.0
+    }
+  },
+  "tolerance": 0.2
+}
