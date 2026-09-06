@@ -23,8 +23,9 @@ class DeterministicLocalProvider:
         system: str,
         prompt: str,
         schema: dict[str, Any] | None = None,
+        output_type: type | None = None,
     ) -> ProviderResult:
-        del system
+        del system, output_type
         if schema and schema.get("title") == "AtBotFactExtraction":
             source = prompt.rsplit("<current-message>\n", 1)[-1].split(
                 "\n</current-message>", 1

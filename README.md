@@ -2,7 +2,7 @@
 
 **Pydantic AI, already set up.** AtBots is a thin layer over
 [Pydantic AI](https://ai.pydantic.dev) that ships with tasks, skills, and
-memory wired together, as a library and a CLI.
+memory wired together, as a Python library with a CLI for setup.
 
 ```bash
 pip install atbots
@@ -15,15 +15,46 @@ worker, or the intelligence layer for any other product.
 
 | Pillar | What it gives you |
 |--------|-------------------|
-| **Tasks** | Named, reusable units of work with declared inputs and typed results. Run them from code or the CLI; inspect what ran. |
+| **Tasks** | Named, reusable units of work with declared inputs and typed results. Run them from Python; inspect the trace of what ran. |
 | **Skills** | `SKILL.md` directories declared in configuration and discovered when `TaskAgent` starts. |
-| **Memory** | Local governed memory stored by the bundled AtMem backend. |
+| **Memory** | Local governed memory, recalled automatically at the start of every task. `0.1.0` ships one backend; see [Configuring memory](#configuring-memory). |
+
+## Quickstart
+
+AtBots runs tasks from Python. The CLI configures and inspects the install; it
+does not run tasks in `0.1.0`.
+
+```bash
+pip install atbots
+ollama pull qwen3:4b
+atbots init --model qwen3:4b --num-ctx 8192   # writes ~/.atbots/config.json
+atbots status                                  # confirm the model is reachable
+```
+
+`atbots status` prints each provider with `available`, and, when it is not,
+`unavailable_reason` — for example `model is not installed: ollama pull qwen3:4b`.
+
+Then run a task:
+
+```python
+from atbots.agent import TaskAgent
+from atbots.config import load_config
+
+agent = TaskAgent(load_config())
+result = agent.run("Summarize what you remember about me.")
+print(result.answer)     # the answer
+print(result.status)     # completed | step_limit | provider_error
+print(result.trace)      # every step, tool, and recovery
+```
+
+The full CLI is `init`, `status`, `doctor`, and `serve`. `serve` runs a loopback
+HTTP companion and is unrelated to running tasks.
 
 ## Thin layer, on purpose
 
 AtBots contributes defaults and wiring — instructions, toolsets, skill loading,
-memory binding, model routing, a CLI. Pydantic AI keeps the agent loop, model
-calls, tool dispatch, and structured output.
+memory binding, model routing, a CLI. Pydantic AI keeps model calls, structured
+output, validation retries, and tool dispatch inside each step.
 
 That means:
 
@@ -38,6 +69,48 @@ no vendor. OpenAI-compatible providers are first-class and require an explicit
 endpoint and credentials — installing AtBots never downloads a large model or
 creates an API key on your behalf. Switching providers is a configuration
 change; tasks, skills, and tools are untouched.
+
+## Small local models
+
+The task loop is built for 4B-class models. It never asks the model to drive a
+native tool-calling protocol; each turn it asks for one small decision — call a
+listed tool, or finish — as a constrained output, and treats every failure as
+something the model can recover from on the next step rather than as a crash.
+
+```bash
+atbots init --model qwen3:4b --num-ctx 8192
+```
+
+**Give the model its context window.** Ollama's OpenAI-compatible endpoint
+silently ignores a per-request `num_ctx`, so a model advertised as 32k serves
+requests at the 4096-token default. Set `num_ctx` on the provider and AtBots
+derives a tag — `qwen3:4b-atbots-ctx8192` — that carries the parameter. It is
+created once, reuses the parent model's layers, and downloads nothing. Without
+`num_ctx`, nothing is provisioned and the server default applies.
+
+`atbots status` reports `serving_model`, `num_ctx`, and `context_provisioned`,
+so the window the model is actually running at is visible.
+
+**Settings that matter on a small model:**
+
+| Setting | Default | What it does |
+|---|---|---|
+| `providers[].num_ctx` | unset | Context window for a local Ollama model |
+| `step_retries` | `2` | In-band re-asks when a decision fails validation; these do not consume the step budget |
+| `observation_char_limit` | `2000` | Per-observation truncation |
+| `observation_window` | `6` | Most recent observations kept in the step prompt |
+| `finish_nudges` | `1` | Times a finish that never tried an available tool is pushed back |
+| `max_task_steps` | `8` | Step budget for the whole run |
+| `provider_failure_limit` | `3` | Consecutive provider failures before the run stops and reports the provider's own error |
+| `tool_failure_limit` | `2` | Failures of one tool before the loop stops calling it |
+
+`atbots status` also reports `unavailable_reason`, so a model you have not
+pulled yet says `model is not installed: ollama pull qwen3:4b` instead of failing
+silently on every step.
+
+A run never raises on model or tool misbehaviour. Malformed decisions, invented
+tool names, refused tools, and failing tool handlers all become observations the
+model reads on its next step; the run ends with a status and a trace either way.
 
 ## Configuration directory
 
@@ -212,8 +285,8 @@ size-limited, and the HTTP companion only binds to loopback.
 
 ## Configuring memory
 
-The current release uses AtMem as its memory backend. By default it stores memory
-in `~/.atbots/atmem.db`. Change `memory_path` in `~/.atbots/config.json` to use
+Memory is a pluggable port. `0.1.0` ships a single backend, AtMem, and stores
+memory in `~/.atbots/atmem.db` by default. Change `memory_path` in `~/.atbots/config.json` to use
 another local database file:
 
 ```json
@@ -237,6 +310,57 @@ read and write. The default values are suitable for one local user:
 Support for interchangeable memory providers such as mem0 and custom classes is
 planned, but is not implemented in `0.1.0`.
 
+## Evals
+
+Unit tests answer "is the harness correct". Evals answer "does a small model
+actually succeed, how often, and how hard did the harness have to work". They are
+two tiers because harness correctness is deterministic and model behaviour is
+statistical, and one suite cannot be both.
+
+```bash
+pip install -e ".[dev]"        # includes the eval extra
+
+python -m pytest -q            # tier 1 runs here, tier 2 does not
+python -m evals.tier1          # tier 1 report
+python -m evals.tier2          # tier 2 report, needs Ollama
+python -m pytest -m eval       # tier 2 as tests
+```
+
+**Tier 1 — the gate.** Scripted model behaviour, no network, under a second. It
+drives the real loop through malformed decisions, invented tool names, repeated
+calls, oversized tool results, and failing tools, and checks the grounded answer
+still comes out. It runs on every commit.
+
+**Tier 2 — the measurement.** The same scenarios against a real local model,
+repeated N times, reported as rates and compared to `evals/baseline.json` with an
+explicit tolerance. It is excluded from the default gate, and skips with a reason
+when Ollama or the model is missing. A measurement used as a pass/fail gate
+becomes noise people learn to ignore.
+
+Each run is scored on four assertions and four metrics:
+
+| Scored | What it catches |
+|---|---|
+| `Completed` | The run reached an answer rather than a budget or provider failure. |
+| `Grounded` | The answer quotes the values the fixture tools produced. |
+| `NoFabrication` | The answer quotes no plausible value the fixtures never produced. |
+| `ToolCoverage` | The required tools actually ran — read from the trace, not the answer. |
+| `steps`, `recoveries`, `tools_called`, `peak_prompt_chars` | How much work the harness did, and whether the step prompt still fits the window. |
+
+`Grounded` and `NoFabrication` are separate on purpose. The defect that motivated
+these evals was a 1.7B model answering *"free disk space is 10 gigabytes"*
+without calling the tool: the run reported `completed`, nothing raised, and the
+number was invented. `evals/scenarios.py` keeps that exact case as a negative
+control, and Tier 1 asserts the suite still fails it — a suite that cannot catch
+its own motivating defect is not measuring anything.
+
+Evaluators are deterministic; nothing here asks a model to judge a model. Add a
+scenario by appending to `SCENARIOS` in `evals/scenarios.py`.
+
+Configure Tier 2 with `ATBOTS_EVAL_MODEL` (default `qwen3:4b`),
+`ATBOTS_EVAL_NUM_CTX` (default `8192`), and `ATBOTS_EVAL_REPEAT` (default `3`).
+Record a new baseline with `python -m evals.tier2 --record`.
+
 ## Spec-driven development
 
 This repository uses [GitHub Spec Kit](https://github.com/github/spec-kit).
@@ -246,6 +370,8 @@ Product behavior is specified first; implementation follows those artifacts.
 |----------|------|
 | Constitution | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) |
 | Feature spec | [`specs/001-general-purpose-agent/spec.md`](specs/001-general-purpose-agent/spec.md) |
+| Small-model harness | [`specs/003-small-model-harness/spec.md`](specs/003-small-model-harness/spec.md) |
+| Evals | [`specs/004-evals/spec.md`](specs/004-evals/spec.md) |
 
 The specification follows this workflow:
 
@@ -268,9 +394,14 @@ Requires the Specify CLI (`uv tool install specify-cli`).
 ## Development
 
 ```bash
+python -m venv .venv && source .venv/bin/activate
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
+
+Use a clean virtual environment. The suite includes a check that every installed
+dependency satisfies the version declared in `pyproject.toml`, so a stale
+environment fails fast rather than testing a version AtBots does not ship.
 
 ## License
 

@@ -20,6 +20,12 @@ def _parser() -> argparse.ArgumentParser:
     init = commands.add_parser("init", help="Configure the local AtMem companion")
     init.add_argument("--model", default="qwen3:4b")
     init.add_argument("--endpoint", default="http://127.0.0.1:11434")
+    init.add_argument(
+        "--num-ctx",
+        type=int,
+        default=8192,
+        help="Context window for the local model (0 leaves the server default).",
+    )
     init.add_argument("--force", action="store_true")
     commands.add_parser("status", help="Show companion capabilities and providers")
     commands.add_parser("doctor", help="Check companion readiness")
@@ -38,11 +44,23 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(f"configuration already exists: {target} (use --force)")
             config = AtBotConfig(
                 profile="memory-companion",
-                providers=[ProviderConfig(model=args.model, endpoint=args.endpoint)],
+                providers=[
+                    ProviderConfig(
+                        model=args.model,
+                        endpoint=args.endpoint,
+                        num_ctx=args.num_ctx or None,
+                    )
+                ],
             )
             save_config(config, target)
             print(f"AtBot companion configured: {target}")
             print(f"Local model: {args.model} via Ollama")
+            if args.num_ctx:
+                print(
+                    f"Context window: {args.num_ctx} "
+                    "(AtBots derives a model tag on first use; Ollama's "
+                    "OpenAI-compatible endpoint ignores per-request num_ctx)"
+                )
             print("AtMem owns storage and the customer dashboard.")
             return 0
         config = load_config(args.config)

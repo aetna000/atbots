@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atbots"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pydantic AI, already set up: a general-purpose agent with tasks, skills, and pluggable memory."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,12 +12,17 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
   "atmem>=2.1,<3",
-  "pydantic-ai-slim[openai]>=2.40",
+  "pydantic>=2.7",
+  "pydantic-ai-slim[openai]>=2.40,<3",
 ]
 
 [project.optional-dependencies]
+evals = [
+  "pydantic-evals>=2.40,<3",
+]
 dev = [
   "pytest>=8.0",
+  "atbots[evals]",
 ]
 
 [project.scripts]
@@ -28,4 +33,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# The repository root is on the path so the non-shipped `evals` package imports.
+pythonpath = ["src", "."]
+# Tier 2 evals talk to a real model server: opt in with `-m eval`.
+addopts = "-m 'not eval'"
+markers = [
+  "eval: live-model evaluation; needs Ollama, excluded from the default gate",
+]

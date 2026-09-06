@@ -18,4 +18,5 @@ class ModelProvider(Protocol):
         system: str,
         prompt: str,
         schema: dict[str, Any] | None = None,
+        output_type: type | None = None,
     ) -> ProviderResult: ...

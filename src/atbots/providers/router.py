@@ -22,6 +22,9 @@ class ModelRouter:
                         api_key_env=row.api_key_env,
                         egress_class=row.egress_class,
                         capability_refs=config.pydantic_capabilities,
+                        kind=row.kind,
+                        num_ctx=row.num_ctx,
+                        retries=config.step_retries,
                     )
                 )
         self._providers.append(DeterministicLocalProvider())
@@ -46,6 +49,22 @@ class ModelRouter:
                 "model": provider.model,
                 "egress_class": provider.egress_class,
                 "available": provider.available(),
+                **_context_status(provider),
             }
             for provider in self._providers
         ]
+
+
+def _context_status(provider: ModelProvider) -> dict[str, object]:
+    """Surface the window the model actually runs at, not the one requested."""
+    resolve = getattr(provider, "context", None)
+    if resolve is None:
+        return {}
+    context = resolve()
+    return {
+        "unavailable_reason": getattr(provider, "unavailable_reason", None),
+        "serving_model": context.tag,
+        "num_ctx": context.num_ctx,
+        "context_provisioned": context.provisioned,
+        "context_note": context.reason,
+    }

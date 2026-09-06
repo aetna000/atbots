@@ -83,7 +83,7 @@ class Hooks:
             handler(event, payload)
 
 
-def guard_tool_result(value: object, *, limit: int = 20_000) -> str:
+def guard_tool_result(value: object, *, limit: int = 2_000) -> str:
     text = json.dumps(value, default=str, sort_keys=True)
     if len(text) > limit:
         return text[:limit] + "…[truncated]"

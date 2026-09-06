@@ -21,6 +21,7 @@ class ProviderConfig:
     endpoint: str = "http://127.0.0.1:11434"
     api_key_env: str | None = None
     egress_class: str = "local"
+    num_ctx: int | None = None
 
 
 @dataclass(slots=True)
@@ -36,6 +37,12 @@ class AtBotConfig:
     recent_message_limit: int = 10
     remote_egress_allowed: bool = False
     max_task_steps: int = 8
+    step_retries: int = 2
+    observation_char_limit: int = 2_000
+    observation_window: int = 6
+    finish_nudges: int = 1
+    provider_failure_limit: int = 3
+    tool_failure_limit: int = 2
     allowed_tools: list[str] = field(default_factory=lambda: ["memory_recall"])
     skill_directories: list[str] = field(default_factory=list)
     pydantic_capabilities: list[str] = field(default_factory=list)
