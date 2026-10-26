@@ -1,0 +1,62 @@
+name: Publish AtBots
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check release tag
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+          project = tomllib.loads(Path('pyproject.toml').read_text())['project']
+          assert project['name'] == 'atbots'
+          assert os.environ['RELEASE_TAG'] == f"v{project['version']}"
+          PY
+      - name: Install and test
+        run: |
+          python -m pip install '.[dev,auth,anthropic,schedule,cloud,supervision,browser]' build twine
+          python -m playwright install --with-deps chromium
+          python -m pytest -q
+      - name: Build and inspect distributions
+        run: |
+          python -m build
+          python -m twine check dist/*
+      - name: Verify installed wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/atbots-wheel"
+          "$RUNNER_TEMP/atbots-wheel/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/atbots-wheel/bin/python" scripts/check_installed.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/atbots
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

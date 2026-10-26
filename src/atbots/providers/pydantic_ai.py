@@ -151,6 +151,9 @@ class PydanticAIProvider:
         )
 
     def _run(self, model: Any, system: str, prompt: str, output_type: type | None) -> Any:
+        return self._build_agent(model, system, output_type).run_sync(prompt)
+
+    def _build_agent(self, model: Any, system: str, output_type: type | None) -> Any:
         from pydantic_ai import Agent, NativeOutput, PromptedOutput
 
         if output_type is None:
@@ -170,7 +173,7 @@ class PydanticAIProvider:
             retries=self.retries,
             capabilities=load_pydantic_capabilities(self.capability_refs),
         )
-        return agent.run_sync(prompt)
+        return agent
 
 
 def strip_reasoning(text: str) -> str:

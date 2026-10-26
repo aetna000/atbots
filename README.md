@@ -4,6 +4,24 @@
 [Pydantic AI](https://ai.pydantic.dev) that ships with tasks, skills, and
 memory wired together, as a Python library with a CLI for setup.
 
+**0.3.0b1 beta (Python 3.11+):** persistent named agents, native Pydantic AI conversations,
+AtMem memory, explicit account authentication and an experimental agent control
+room. Install the beta explicitly:
+
+```sh
+python -m pip install --upgrade 'atbots==0.3.0b1'
+atbots --new researcher --model qwen3:4b
+atbots researcher
+```
+
+An already available local Ollama model is required for these chat examples.
+Browser, scheduling, web, supervision and cloud adapters are experimental; they
+require the corresponding extras and explicit configuration. See
+[beta release notes](docs/releases/v0.3.0b1.md) and the
+[agent platform guide](docs/agent-platform.md) for verified scope and limits.
+The library quickstart below remains compatible; unpinned pip installs select the
+stable release.
+
 ```bash
 pip install atbots
 ```
@@ -47,7 +65,7 @@ print(result.status)     # completed | step_limit | provider_error
 print(result.trace)      # every step, tool, and recovery
 ```
 
-The full CLI is `init`, `status`, `doctor`, and `serve`. `serve` runs a loopback
+The CLI is `init`, `status`, `doctor`, `auth`, and `serve`. `serve` runs a loopback
 HTTP companion and is unrelated to running tasks.
 
 ## Thin layer, on purpose
@@ -69,6 +87,102 @@ no vendor. OpenAI-compatible providers are first-class and require an explicit
 endpoint and credentials — installing AtBots never downloads a large model or
 creates an API key on your behalf. Switching providers is a configuration
 change; tasks, skills, and tools are untouched.
+
+## Account sign-in (0.3.0b1 beta)
+
+Use the authentication extra in a virtual environment:
+
+```bash
+python -m pip install --upgrade 'atbots[auth]==0.3.0b1'
+atbots auth login chatgpt
+atbots auth status chatgpt
+atbots auth logout chatgpt
+```
+
+| Provider | Supported path | Important boundary |
+| --- | --- | --- |
+| ChatGPT | Native Pydantic AI browser sign-in for **AtBots**, with optional ChatGPT-plan usage consent | Identity sign-in alone does not permit inference. Eligibility, models and usage limits belong to OpenAI. |
+| GitHub Copilot | Native GitHub device sign-in using **your own** OAuth application client ID | Enable device flow on that app. GitHub login alone does not prove the app/token or chosen model has Copilot access. |
+| Anthropic | Native API-key provider via the `anthropic` extra | Third-party Claude.ai subscription OAuth is deliberately unsupported; no session/token scraping. |
+
+ChatGPT login opens the browser and uses a loopback callback on port 1455;
+free that port first if another sign-in is listening. Login has a 300-second
+deadline (`--timeout`, 1–900). It does not invoke a model, enable remote egress
+or edit your provider configuration. Authorize plan usage when prompted if you
+intend to run inference. The URL is not printed because reauthentication can
+include a sensitive identity hint. Headless ChatGPT sign-in is not implemented.
+
+For Copilot, register an OAuth application under your GitHub developer settings,
+enable its device flow, then run:
+
+```bash
+atbots auth login github-copilot --client-id YOUR_OWN_OAUTH_CLIENT_ID
+atbots auth status github-copilot
+atbots auth logout github-copilot
+```
+
+Approve only the device code shown by your own login attempt. This does not
+borrow the Copilot/VS Code/GitHub CLI client identity or read their token files.
+GitHub.com is supported by the upstream helper; enterprise authorization hosts
+are not supported by this integration. Expiring Copilot tokens require login
+again; automatic refresh is **not** claimed for Copilot.
+
+AtBots stores credentials only in a supported native OS keychain (macOS Keychain,
+Windows Credential Manager, or supported Linux Secret Service/libsecret/KWallet
+backend). A missing/locked store or plaintext/chained fallback fails closed.
+No unencrypted credential-file fallback is provided. Profiles are shared across
+AtBots configurations for the same OS user; `--profile work` selects a separate
+credential, and must match `auth_profile` on the model provider. Tokens stay out
+of `config.json`, status output and ordinary error messages. ChatGPT refresh is
+performed by Pydantic AI and saved back to the keychain; a per-profile process
+lock serializes login, inference/refresh and logout. A persistence failure stops
+the call and requires recovery/sign-in, not reuse of a stale refresh token.
+
+Configure and select inference explicitly, after sign-in:
+
+```python
+from atbots.agent import TaskAgent
+from atbots.config import ProviderConfig, load_config
+
+config = load_config()  # run atbots init first if necessary
+config.remote_egress_allowed = True
+config.providers = [ProviderConfig(
+    name="my-chatgpt",
+    kind="chatgpt",          # or "github-copilot"
+    model="YOUR_ACCESSIBLE_MODEL_ID",
+    egress_class="remote",
+    auth_profile="default",
+)]
+result = TaskAgent(config).run("Summarize what you remember about me.", remote=True)
+print(result.answer)
+```
+
+The native account kinds ignore the legacy OpenAI-compatible `endpoint`; their
+upstream provider chooses its own service endpoint. Model IDs are user-selected,
+not inferred from a login or a local catalog. `auth status` is local-only and
+reports inference access as **unverified**, even when credentials are saved.
+Unavailable selected account providers fail clearly rather than silently switch
+to a different paid provider. Existing remote/sensitive-content gates remain.
+
+For native Anthropic API access, install `python -m pip install -e ".[anthropic]"`,
+set your own API key through an environment variable, and use
+`ProviderConfig(name="claude-api", kind="anthropic", model="YOUR_CLAUDE_MODEL_ID",
+api_key_env="ANTHROPIC_API_KEY", egress_class="remote")`. API-key usage has its
+own billing; a Claude subscription is not treated as an API key. Running
+`atbots auth login anthropic` explains this unsupported OAuth boundary without
+opening a login flow or reading Claude credentials.
+
+Logout removes only the selected local AtBots credential. It does not revoke
+the upstream app authorization or sign out other applications; revoke app access
+in provider settings separately. No authentication can guarantee unlimited or
+free model access. This implementation has offline flow/model/refresh tests;
+live account consent, entitlement and Windows/Linux keychain acceptance are not
+claimed by those tests.
+
+References: [OpenAI sign-in](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt),
+[native Pydantic ChatGPT](https://pydantic.dev/docs/ai/models/openai-chatgpt/),
+[native Pydantic Copilot](https://pydantic.dev/docs/ai/models/github-copilot/),
+and [Anthropic authentication restrictions](https://code.claude.com/docs/en/legal-and-compliance).
 
 ## Small local models
 
