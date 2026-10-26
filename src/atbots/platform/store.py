@@ -243,6 +243,10 @@ class AgentStore:
             )
 
     def share_memory(self, source: str, recipient: str, *, enabled: bool) -> dict:
+        if enabled:
+            raise StoreError(
+                "Memory is private per agent; cross-agent sharing is disabled"
+            )
         a, b = self.get(source), self.get(recipient)
         if a.id == b.id:
             raise StoreError("Memory sharing requires two different agents")

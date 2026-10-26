@@ -3,7 +3,7 @@ from pydantic_ai.models.test import TestModel
 
 from atbots.platform.control import ControlPlan, ControlRoom
 from atbots.platform.memory import AtMemMemory, MemoryPolicyError
-from atbots.platform.store import AgentStore
+from atbots.platform.store import AgentStore, StoreError
 
 
 def test_correct_forget_and_cross_scope_denial(tmp_path):
@@ -22,22 +22,24 @@ def test_correct_forget_and_cross_scope_denial(tmp_path):
     assert "green" not in memory.context("favorite color", egress="local").text
 
 
-def test_sharing_is_directional_live_and_revocable(tmp_path):
+def test_sharing_is_refused_and_legacy_edges_do_not_expose_memory(tmp_path):
     store = AgentStore(tmp_path)
     store.create("researcher")
     store.create("other")
     a, b = AtMemMemory(store, "researcher"), AtMemMemory(store, "other")
     a.remember("I prefer concise technical answers")
     assert not b.context("concise technical answers", egress="local").text
-    store.share_memory("researcher", "other", enabled=True)
+    with pytest.raises(StoreError, match="private"):
+        store.share_memory("researcher", "other", enabled=True)
+    with store.connect() as db:
+        db.execute(
+            "INSERT INTO memory_shares VALUES (?,?,?)",
+            (store.get("researcher").id, store.get("other").id, "legacy"),
+        )
     context = b.context("concise technical answers", egress="local")
-    assert "Shared by researcher" in context.text
-    assert b.confirm(context, "run-shared")
-    assert store.shared_sources("researcher") == []
+    assert not context.text
     store.share_memory("researcher", "other", enabled=False)
     assert not b.context("concise technical answers", egress="local").text
-    with pytest.raises(MemoryPolicyError, match="revoked"):
-        b.confirm(context, "run-revoked")
 
 
 def test_automatic_rules_capture_not_unverified_agent_output(tmp_path):
@@ -52,28 +54,20 @@ def test_automatic_rules_capture_not_unverified_agent_output(tmp_path):
     assert len(memory.inspect()) == 1
 
 
-def test_control_room_memory_mutations_require_approval(tmp_path):
+def test_agent_memory_mutations_require_operator_approval_not_room_access(tmp_path):
+    from atbots.platform.environment import AgentEnvironment
+
     store = AgentStore(tmp_path)
     store.create("researcher")
     room = ControlRoom(store, model=TestModel())
-    proposal = room.dispatch(
-        ControlPlan(
-            action="memory_remember",
-            name="researcher",
-            message="I prefer concise technical answers",
-        )
-    )
+    with pytest.raises(StoreError, match="Private"):
+        room.dispatch(ControlPlan(action="memory_inspect", name="researcher"))
+    proposal = AgentEnvironment(
+        store, "researcher", AtMemMemory(store, "researcher")
+    ).request_remember("I prefer concise technical answers")
     assert AtMemMemory(store, "researcher").inspect() == []
     assert (
         room.approve(proposal["approval_required"])["memory_result"]["decision"]
         == "active"
     )
-    records = room.dispatch(ControlPlan(action="memory_inspect", name="researcher"))[
-        "memories"
-    ]
-    proposal = room.dispatch(
-        ControlPlan(
-            action="memory_forget", name="researcher", record_id=records[0]["id"]
-        )
-    )
-    assert room.approve(proposal["approval_required"])["memory_result"]["deleted"]
+    assert len(AtMemMemory(store, "researcher").inspect()) == 1

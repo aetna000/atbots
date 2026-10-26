@@ -79,33 +79,17 @@ class AtMemMemory:
             if candidates.candidates
             else None
         )
-        shared = []
-        if include_shared:
-            for name in self.store.shared_sources(self.name)[:3]:
-                other = AtMemMemory(self.store, name)
-                context = other.context(query, egress=egress, include_shared=False)
-                if context.text:
-                    shared.append((name, context))
-        texts = ([package.context] if package else []) + [
-            f"Shared by {name}:\n{ctx.text}" for name, ctx in shared
-        ]
-        return MemoryContext(
-            text="\n".join(texts), package=package, shared=tuple(shared)
-        )
+        # Owner policy: memory is private, even if an older release persisted
+        # sharing edges. Retain records/edges for recovery, never follow them.
+        return MemoryContext(text=package.context if package else "", package=package)
 
     def confirm(self, context: MemoryContext, run_id: str) -> str | None:
         from atmem.contracts import ExposureConfirmation
 
         package = context.package
         receipts = []
-        for name, shared in context.shared:
-            if name not in self.store.shared_sources(self.name):
-                raise MemoryPolicyError(
-                    "Memory sharing was revoked during this turn; prior exposure cannot be undone"
-                )
-            receipt = AtMemMemory(self.store, name).confirm(shared, run_id)
-            if receipt:
-                receipts.append(receipt)
+        if context.shared:
+            raise MemoryPolicyError("Cross-agent memory exposure is forbidden")
         if package is not None:
             receipts.append(
                 self.gateway.confirm(

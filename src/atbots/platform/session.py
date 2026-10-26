@@ -16,6 +16,7 @@ from pydantic_ai.usage import UsageLimits
 
 from atbots.auth import profile_lock
 from atbots.config import ProviderConfig
+from atbots.platform.environment import AgentEnvironment
 from atbots.platform.memory import AtMemMemory, MemoryContext, screen_message
 from atbots.platform.models import ModelBinding
 from atbots.platform.skills import Skills
@@ -29,6 +30,22 @@ class SessionError(RuntimeError):
 
 @asynccontextmanager
 async def configured_model(binding: ModelBinding):
+    if (
+        binding.kind == "anthropic"
+        and binding.auth_profile.startswith("key-")
+        and not binding.api_key_env
+    ):
+        from anthropic import AsyncAnthropic
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
+        from atbots.platform.connections import api_key
+
+        async with AsyncAnthropic(api_key=api_key(binding)) as client:
+            yield AnthropicModel(
+                binding.model, provider=AnthropicProvider(anthropic_client=client)
+            )
+        return
     if binding.kind in {"chatgpt", "github-copilot", "anthropic"}:
         from atbots.providers.authenticated import AuthenticatedProvider
 
@@ -54,16 +71,17 @@ async def configured_model(binding: ModelBinding):
         raise SessionError(
             "Configured provider API-key environment variable is missing"
         )
-    if binding.egress_class == "remote" and not binding.api_key_env:
-        raise SessionError(
-            "Remote compatible provider requires an explicit API-key environment reference"
-        )
+    key = None
+    if binding.egress_class == "remote":
+        from atbots.platform.connections import api_key
+
+        key = api_key(binding)
     base = binding.endpoint.rstrip("/")
     if not base.endswith("/v1"):
         base += "/v1"
     provider = OpenAIProvider(
         base_url=base,
-        api_key=os.environ.get(binding.api_key_env or "") or "local-not-secret",
+        api_key=key or os.environ.get(binding.api_key_env or "") or "local-not-secret",
     )
     async with provider:
         yield OpenAIChatModel(binding.model, provider=provider)
@@ -97,6 +115,7 @@ class AgentSession:
         output_type: Any = str,
         memory: Any = _DEFAULT_MEMORY,
         cancellation_token: Any = None,
+        model_settings: Any = None,
     ) -> None:
         self.store, self.name = store, name
         definition = store.get(name)
@@ -106,15 +125,32 @@ class AgentSession:
         self.model = model
         self.cancellation_token = cancellation_token
         self.memory = AtMemMemory(store, name) if memory is _DEFAULT_MEMORY else memory
+        if name == "control-room":
+            self.memory = None  # Fleet planning never reads private agent memories.
+        self.environment = AgentEnvironment(store, name, self.memory)
         capabilities = definition.capabilities
         workspace_tools = WorkspaceTools(
             store.workspace(name) / "files",
             read=capabilities.file_read,
             create=capabilities.file_create,
         )
-        installed_tools = workspace_tools.tools()
-        if capabilities.skills:
+        installed_tools = workspace_tools.tools() + self.environment.tools()
+        if name != "control-room":
             skills = Skills(store.workspace(name) / "skills")
+
+            def available_skills() -> list[dict[str, str]]:
+                """Discover installed skills explicitly granted to this agent."""
+                return [
+                    {
+                        "name": "atsys",
+                        "loader": "load_atsys_skill",
+                        "source": "built-in",
+                    }
+                ] + [
+                    {"name": row["name"]}
+                    for row in skills.list_skills()
+                    if row["name"] in capabilities.skills
+                ]
 
             def load_skill(name: str) -> str:
                 """Load an explicitly approved skill's instructions on demand."""
@@ -122,16 +158,25 @@ class AgentSession:
                     raise PermissionError("Skill has not been granted to this agent")
                 return skills.load_skill(name)
 
-            installed_tools.append(load_skill)
+            def load_atsys_skill() -> str:
+                """Load built-in guidance for delegated worker/observer/supervisor objectives."""
+                from importlib.resources import files
+
+                return files("atbots.platform").joinpath("atsys-skill.md").read_text()
+
+            installed_tools.extend([available_skills, load_atsys_skill])
+            if capabilities.skills:
+                installed_tools.append(load_skill)
         self.agent = Agent(
             model,
             defer_model_check=True,
             name=name,
-            instructions=definition.instructions,
+            instructions=[definition.instructions, self.environment.instructions],
             tools=tuple(tools) + tuple(installed_tools),
             toolsets=toolsets,
             retries=1,
             output_type=output_type,
+            model_settings=model_settings,
         )
 
     async def _run(self, prompt, definition, history, context):
@@ -160,17 +205,29 @@ class AgentSession:
             ):
                 raise SessionError("Configured model does not support vision")
             if definition.capabilities.browser_domains:
-                from pydantic_ai.toolsets import FunctionToolset
+                if definition.capabilities.browser_transport == "mcp":
+                    from atbots.platform.browser_mcp import toolset
 
-                from atbots.platform.browser import BrowserTools
+                    kwargs["toolsets"] = [
+                        toolset(
+                            self.store.workspace(self.name) / "browser",
+                            definition.capabilities,
+                        )
+                    ]
+                else:
+                    from pydantic_ai.toolsets import FunctionToolset
 
-                browser = await stack.enter_async_context(
-                    BrowserTools(
-                        self.store.workspace(self.name) / "browser",
-                        definition.capabilities,
+                    from atbots.platform.browser import BrowserTools
+
+                    browser = await stack.enter_async_context(
+                        BrowserTools(
+                            self.store.workspace(self.name) / "browser",
+                            definition.capabilities,
+                        )
                     )
-                )
-                kwargs["toolsets"] = [FunctionToolset(browser.tools(), sequential=True)]
+                    kwargs["toolsets"] = [
+                        FunctionToolset(browser.tools(), sequential=True)
+                    ]
             return await self.agent.run(prompt, model=model, **kwargs)
 
     def chat(self, prompt: str, *, sensitivity: str = "personal") -> TurnResult:

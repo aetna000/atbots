@@ -51,7 +51,7 @@ class Operations:
             )
         return identity
 
-    def consume(self, identity: str, *, now=None) -> dict:
+    def consume(self, identity: str, *, now=None, preview=False) -> dict:
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -66,7 +66,10 @@ class Operations:
                 raise StoreError("Approval is missing, expired or already used")
             if hashlib.sha256(row[0].encode()).hexdigest() != row[1]:
                 raise StoreError("Approval payload integrity failure")
-            db.execute("UPDATE approvals SET state='executing' WHERE id=?", (identity,))
+            if not preview:
+                db.execute(
+                    "UPDATE approvals SET state='executing' WHERE id=?", (identity,)
+                )
         return json.loads(row[0])
 
     def finish_approval(self, identity, result):
@@ -160,13 +163,18 @@ class Operations:
 
     def claim(self, identity: str) -> str:
         token = uuid.uuid4().hex
-        with self.store.connect() as db:
+        with (
+            self.store.turn_lock(self.get(identity)["agent"]),
+            self.store.connect() as db,
+        ):
             db.execute("BEGIN IMMEDIATE")
             job = db.execute(
                 "SELECT agent FROM jobs WHERE id=?", (identity,)
             ).fetchone()
             if job is None:
                 raise StoreError("Unknown job ID")
+            if self.store.get(job[0]).state != "active":
+                raise StoreError("Agent is paused or retired; work remains queued")
             if db.execute(
                 "SELECT 1 FROM jobs WHERE agent=? AND status IN ('running','cancel_requested')",
                 (job[0],),
@@ -301,6 +309,8 @@ class Operations:
         job = self.get(identity)
         if job["status"] != "queued":
             raise StoreError("Only queued work can launch")
+        if self.store.get(job["agent"]).state != "active":
+            raise StoreError("Agent is paused or retired; work remains queued")
         subprocess.Popen(
             [
                 sys.executable,

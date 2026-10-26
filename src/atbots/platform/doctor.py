@@ -23,7 +23,15 @@ def doctor(store):
         "ok" if shutil.disk_usage(store.root).free > 250_000_000 else "error",
         "At least 250 MB of local free space required",
     )
-    for package in ("atmem", "pydantic-ai-slim", "playwright", "APScheduler", "atsys"):
+    for package in (
+        "atbots",
+        "atmem",
+        "pydantic-ai-slim",
+        "playwright",
+        "APScheduler",
+        "atsys",
+        "atflows",
+    ):
         try:
             check(package, "installed", version(package))
         except PackageNotFoundError:
@@ -60,8 +68,8 @@ def doctor(store):
         )
     check(
         "scheduler",
-        "manual_service",
-        "Run atbots runner under your OS service manager for continuous scheduling",
+        "desktop_managed_or_explicit_runner",
+        "Opening atbots starts its local background runner. PC sleep stops progress. OS boot integration remains explicit; do not start a second runner for the same root.",
     )
     check(
         "integrations",

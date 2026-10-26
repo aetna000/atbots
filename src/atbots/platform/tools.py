@@ -48,6 +48,22 @@ class WorkspaceTools:
         return {"path": path, "bytes": target.stat().st_size}
 
     def tools(self):
-        return ([self.read_file] if self.read_allowed else []) + (
+        return ([self.list_files, self.read_file] if self.read_allowed else []) + (
             [self.create_file] if self.create_allowed else []
         )
+
+    def list_files(self) -> list[str]:
+        """Discover up to 100 scoped artifacts, without reading their contents."""
+        if not self.read_allowed:
+            raise PermissionError("Workspace read permission is not granted")
+        paths = []
+        for path in self.root.rglob("*"):
+            if (
+                path.is_file()
+                and not path.is_symlink()
+                and path.resolve().is_relative_to(self.root)
+            ):
+                paths.append(str(path.relative_to(self.root)))
+                if len(paths) >= 100:
+                    break
+        return sorted(paths)

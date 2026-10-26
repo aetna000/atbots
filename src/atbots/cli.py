@@ -48,6 +48,11 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
+    if raw == ["--version"]:
+        from atbots import __version__
+
+        print("AtBots " + __version__)
+        return 0
     legacy = {"auth", "init", "status", "doctor", "serve"}
     if not raw or raw[0] in {"--root", "--new", "agents", "chat", "control"} or (
         not raw[0].startswith("-") and raw[0] not in legacy

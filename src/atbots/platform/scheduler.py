@@ -259,20 +259,41 @@ class Scheduler:
             self.operations.reconcile_stale()
         return created
 
-    def serve(self):
+    def run_once(self):
+        """One runner cycle. Paused/retired agents cannot launch queued work."""
+        self.tick()
+        active_agents = {
+            j["agent"]
+            for j in self.operations.list()
+            if j["status"] in {"running", "cancel_requested"}
+        }
+        for job in self.operations.list():
+            if (
+                job["status"] == "queued"
+                and job["agent"] not in active_agents
+                and self.store.get(job["agent"]).state == "active"
+            ):
+                try:
+                    self.operations.launch(job["id"])
+                except StoreError:
+                    if (
+                        self.store.get(job["agent"]).state != "active"
+                        or self.operations.get(job["id"])["status"] != "queued"
+                    ):
+                        continue  # Pause/cancel won the race; do not kill the runner.
+                    raise
+                active_agents.add(job["agent"])
+
+    def serve(self, stop=None, report=None):
         """Run until stopped; install with the user's OS service manager for boot."""
         from filelock import FileLock
 
         with FileLock(str(self.store.root / "runner.lock"), timeout=0):
-            while True:
-                self.tick()
-                active_agents = {
-                    j["agent"]
-                    for j in self.operations.list()
-                    if j["status"] in {"running", "cancel_requested"}
-                }
-                for job in self.operations.list():
-                    if job["status"] == "queued" and job["agent"] not in active_agents:
-                        self.operations.launch(job["id"])
-                        active_agents.add(job["agent"])
-                time.sleep(2)
+            while stop is None or not stop.is_set():
+                self.run_once()
+                if report:
+                    report()
+                if stop is None:
+                    time.sleep(2)
+                else:
+                    stop.wait(2)
