@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from atbots.platform.desktop import _live, open_desktop
+from atbots.platform.desktop import STARTUP_TIMEOUT_SECONDS, _live, open_desktop
 from atbots.platform.store import AgentStore
 
 
@@ -37,7 +37,7 @@ def test_real_desktop_private_reconnect_and_no_duplicate_runner(tmp_path, monkey
         stderr=subprocess.DEVNULL,
     )
     try:
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
         value = None
         while time.monotonic() < deadline:
             value = _live(store)
@@ -66,6 +66,35 @@ def test_real_desktop_private_reconnect_and_no_duplicate_runner(tmp_path, monkey
     finally:
         process.terminate()
         process.wait(timeout=10)
+
+
+def test_cold_desktop_start_waits_without_duplicate_process(tmp_path, monkeypatch):
+    store = AgentStore(tmp_path)
+    elapsed = [0.0]
+    spawned = []
+    value = {"pid": 123, "port": 43122, "token": "test-only-token"}
+    monkeypatch.setattr("atbots.platform.desktop.time.monotonic", lambda: elapsed[0])
+    monkeypatch.setattr(
+        "atbots.platform.desktop.time.sleep",
+        lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds),
+    )
+    monkeypatch.setattr(
+        "atbots.platform.desktop._live",
+        lambda store: value if elapsed[0] >= 20 else None,
+    )
+
+    class Process:
+        def poll(self):
+            return None
+
+    def launch(*args, **kwargs):
+        spawned.append(True)
+        return Process()
+
+    monkeypatch.setattr("atbots.platform.desktop.subprocess.Popen", launch)
+    monkeypatch.setattr("atbots.platform.desktop.webbrowser.open", lambda address: True)
+    assert open_desktop(store) == "http://127.0.0.1:43122"
+    assert len(spawned) == 1 and 20 <= elapsed[0] < STARTUP_TIMEOUT_SECONDS
 
 
 def test_scheduler_transient_failure_recovers_without_job_replay(tmp_path, monkeypatch):

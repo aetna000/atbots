@@ -17,6 +17,8 @@ from atbots.platform.integrations import NoRedirect
 from atbots.platform.scheduler import Scheduler
 from atbots.platform.store import AgentStore, StoreError, stamp
 
+STARTUP_TIMEOUT_SECONDS = 60
+
 
 def _metadata(store):
     path = store.root / "desktop.json"
@@ -56,7 +58,9 @@ def _live(store):
 
 def open_desktop(store, *, port=0):
     """Start or reopen this root's UI. Closing the tab/terminal does not stop work."""
-    with FileLock(str(store.root / "desktop-start.lock"), timeout=15):
+    with FileLock(
+        str(store.root / "desktop-start.lock"), timeout=STARTUP_TIMEOUT_SECONDS + 5
+    ):
         value = _live(store)
         if value is None:
             # Refuse symlinks instead of following them while opening the log.
@@ -88,7 +92,8 @@ def open_desktop(store, *, port=0):
                     if os.name == "nt"
                     else 0,
                 )
-            for _ in range(100):
+            deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
                 value = _live(store)
                 if value:
                     break
