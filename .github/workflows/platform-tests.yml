@@ -4,6 +4,9 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: platform-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   test:
     strategy:
@@ -13,7 +16,7 @@ jobs:
         python: ['3.12']
         include:
           - os: ubuntu-latest
-            python: '3.10'
+            python: '3.11'
           - os: ubuntu-latest
             python: '3.13'
     runs-on: ${{ matrix.os }}

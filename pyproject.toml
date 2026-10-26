@@ -7,7 +7,7 @@ name = "atbots"
 version = "0.3.0b1"
 description = "Pydantic AI, already set up: a general-purpose agent with tasks, skills, and pluggable memory."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [

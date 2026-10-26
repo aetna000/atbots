@@ -4,7 +4,7 @@
 [Pydantic AI](https://ai.pydantic.dev) that ships with tasks, skills, and
 memory wired together, as a Python library with a CLI for setup.
 
-**0.3.0b1 beta:** persistent named agents, native Pydantic AI conversations,
+**0.3.0b1 beta (Python 3.11+):** persistent named agents, native Pydantic AI conversations,
 AtMem memory, explicit account authentication and an experimental agent control
 room. Install the beta explicitly:
 

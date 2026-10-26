@@ -25,3 +25,10 @@ or version bump alone is not a completed release.
 Release notes: docs/releases/v0.3.0b1.md. Local logs and distributions are in
 ignored dist/release-evidence and dist/packages. The published artifact must
 be verified independently against its registry digest and a clean install.
+
+Initial Linux/Python 3.12 CI passed. Python 3.10 correctly exposed an impossible
+dependency resolution: pydantic-ai-slim 2.61 requires Python >=3.11. The beta
+metadata, migration notes and minimum-version CI target now declare 3.11. This
+changes the supported minimum honestly rather than downgrading authentication
+code to an unverified upstream version. Superseded branch runs are cancelled
+when a new commit replaces them; current full-platform checks still run.
