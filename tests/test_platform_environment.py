@@ -25,7 +25,11 @@ def test_native_environment_and_builtin_atsys_with_no_extra_install(tmp_path):
         nonlocal calls
         calls += 1
         assert "persistent AtBots agent" in info.instructions
-        assert str(store.workspace("coder") / "files") in info.instructions
+        # The host manifest is JSON: Windows backslashes must stay escaped.
+        assert (
+            json.dumps(str(store.workspace("coder") / "files"), ensure_ascii=False)
+            in info.instructions
+        )
         if calls == 1:
             return ModelResponse(
                 parts=[
