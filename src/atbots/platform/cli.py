@@ -176,7 +176,11 @@ def main(argv=None):
         if sys.stdin.isatty():
             _chat(store, created.name)
         return 0
-    if args.command in {None, "control"}:
+    if args.command is None:
+        from atbots.platform.desktop import open_desktop
+
+        open_desktop(store)
+    elif args.command == "control":
         _control(store)
     elif args.command == "chat":
         _chat(store, args.name, args.message)

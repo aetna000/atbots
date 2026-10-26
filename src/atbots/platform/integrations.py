@@ -2,6 +2,7 @@
 
 import json
 from importlib import metadata, resources
+from typing import Literal
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
@@ -9,6 +10,7 @@ from pydantic import Field, model_validator
 
 from atbots.platform.memory import screen_message
 from atbots.platform.models import Contract, ModelBinding
+from atbots.platform.store import StoreError
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -36,10 +38,13 @@ class SupervisedObjective(Contract):
     endpoint: str = "http://127.0.0.1:4310"
     worker: str = "codex"
     model: str = ""
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"] = "medium"
     supervisor_provider: str = "codex"
     supervisor_model: str = ""
+    supervisor_effort: Literal["low", "medium", "high", "xhigh"] = "medium"
     repair_provider: str = "codex"
     repair_model: str = ""
+    repair_effort: Literal["low", "medium", "high", "xhigh"] = "medium"
     trusted_local_execution: bool = False
     allow_repair: bool = False
     network_access: bool = False
@@ -103,7 +108,9 @@ class AtSysClient:
         return health
 
     def submit(self, definition, workspace, objective, contract: SupervisedObjective):
-        self.health()
+        if not 3 <= len(objective) <= 6000:
+            raise ValueError("AtSys objective must contain 3–6000 characters")
+        self.readiness()
         try:
             from packaging.version import Version
 
@@ -126,10 +133,13 @@ class AtSysClient:
             cwd=str(workspace),
             worker=contract.worker,
             model=contract.model,
+            reasoningEffort=contract.reasoning_effort,
             supervisorProvider=contract.supervisor_provider,
             supervisorModel=contract.supervisor_model,
+            supervisorEffort=contract.supervisor_effort,
             repairProvider=contract.repair_provider,
             repairModel=contract.repair_model,
+            repairEffort=contract.repair_effort,
             trustedLocalExecution=contract.trusted_local_execution,
             allowRepair=contract.allow_repair,
             networkAccess=contract.network_access,
@@ -170,6 +180,18 @@ class AtSysClient:
             "budget": f"Attempt timeout {definition.limits.timeout_seconds}s; one retry and supervisor call; monetary cost unknown",
         }
         return self.request("/api/tasks", method="POST", data=defaults)
+
+    def readiness(self):
+        health = self.health()
+        state = self.request("/api/operations")
+        daemon = state.get("daemon")
+        if daemon and (
+            daemon.get("providerProtocol") != 1 or not state.get("daemonHealthy", False)
+        ):
+            raise StoreError(
+                "AtSys dashboard is reachable but its watchdog is old or unhealthy. Open this agent's Supervision and choose Start private AtSys; existing shared work will not be restarted"
+            )
+        return health
 
     def status(self, identity):
         tasks = self.request("/api/operations")["tasks"]
@@ -251,7 +273,9 @@ class Delegations:
 
     def list(self):
         with self.store.connect() as db:
-            ids = [r[0] for r in db.execute("SELECT id FROM delegations")]
+            ids = [
+                r[0] for r in db.execute("SELECT id FROM delegations ORDER BY rowid")
+            ]
         return [self.get(i) for i in ids]
 
     def observe(self, identity):

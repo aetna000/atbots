@@ -1,29 +1,32 @@
 # AtBots
 
-**Pydantic AI, already set up.** AtBots is a thin layer over
+**Your agents. Your models. Your control.** AtBots is a thin layer over
 [Pydantic AI](https://ai.pydantic.dev) that ships with tasks, skills, and
-memory wired together, as a Python library with a CLI for setup.
+memory wired together, with a local UI and a Python library.
 
-**0.3.0b1 beta (Python 3.11+):** persistent named agents, native Pydantic AI conversations,
-AtMem memory, explicit account authentication and an experimental agent control
-room. Install the beta explicitly:
+**AtBots 0.3.0b2 beta:** [feature 006](specs/006-agent-control-room/spec.md)
+defines persistent named agents, conversational terminal/web management, default
+AtMem memory, browser/workspace tools, schedules, optional AtFlows observability,
+AtSys supervision, and portable cloud deployment. This checkout includes native
+conversations, memory controls, durable jobs/approvals, browser/file/skill tools,
+schedules, the local web control room, integration adapters and encrypted cloud
+state/container tooling. Full cloud and multi-runtime acceptance remain pending;
+the corrected UI is included in `0.3.0b2`. The older
+`0.3.0b1` does not include these fixes. See the [UI-first guide](docs/agent-platform.md) and
+[verification](specs/006-agent-control-room/corrective-verification-20261027.md) and
+[release notes](docs/releases/v0.3.0b2.md). The legacy
+quickstart below describes the earlier library API, not the new setup journey.
 
-```sh
-python -m pip install --upgrade 'atbots==0.3.0b1'
-atbots --new researcher --model qwen3:4b
-atbots researcher
-```
-
-An already available local Ollama model is required for these chat examples.
-Browser, scheduling, web, supervision and cloud adapters are experimental; they
-require the corresponding extras and explicit configuration. See
-[beta release notes](docs/releases/v0.3.0b1.md) and the
-[agent platform guide](docs/agent-platform.md) for verified scope and limits.
-The library quickstart below remains compatible; unpinned pip installs select the
-stable release.
+For the corrected beta, open `atbots`, connect your providers in
+**Setup & connections**, select **Control room model**, then choose **New agent**.
+Each agent gets private AtMem, a visible workspace, callable memory tools and
+built-in AtSys guidance. Configure its supervised roles in **Supervision**.
+No model needs to be working just to configure the app. Closing a browser tab
+does not stop the local runner; idle agents make no model calls.
 
 ```bash
-pip install atbots
+python -m pip install --upgrade 'atbots==0.3.0b2'
+atbots
 ```
 
 AtBots is a general-purpose agent package. It is not a sidecar, an extraction
@@ -37,7 +40,7 @@ worker, or the intelligence layer for any other product.
 | **Skills** | `SKILL.md` directories declared in configuration and discovered when `TaskAgent` starts. |
 | **Memory** | Local governed memory, recalled automatically at the start of every task. `0.1.0` ships one backend; see [Configuring memory](#configuring-memory). |
 
-## Quickstart
+## Legacy library quickstart
 
 AtBots runs tasks from Python. The CLI configures and inspects the install; it
 does not run tasks in `0.1.0`.
@@ -88,12 +91,13 @@ endpoint and credentials — installing AtBots never downloads a large model or
 creates an API key on your behalf. Switching providers is a configuration
 change; tasks, skills, and tools are untouched.
 
-## Account sign-in (0.3.0b1 beta)
+## Account sign-in
 
-Use the authentication extra in a virtual environment:
+Account sign-in is included in the beta. The UI's Setup & connections is the
+recommended path. Equivalent terminal commands, in your Python environment:
 
 ```bash
-python -m pip install --upgrade 'atbots[auth]==0.3.0b1'
+python -m pip install --upgrade 'atbots==0.3.0b2'
 atbots auth login chatgpt
 atbots auth status chatgpt
 atbots auth logout chatgpt

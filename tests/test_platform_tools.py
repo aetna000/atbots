@@ -90,6 +90,22 @@ def test_browser_policy_and_real_chrome_fixture(tmp_path):
             assert "Saved" in await browser.browser_snapshot()
             screenshot = await browser.browser_screenshot()
             assert screenshot.content[0].media_type == "image/png"
+            from cryptography.fernet import Fernet
+
+            key = Fernet.generate_key()
+            await browser.browser.add_cookies(
+                [
+                    {
+                        "name": "fixture",
+                        "value": "isolated-fixture-value",
+                        "url": f"http://127.0.0.1:{server.server_port}",
+                    }
+                ]
+            )
+            payload = await browser.export_session(key)
+            assert b"isolated-fixture-value" not in payload
+            await browser.browser.clear_cookies()
+            assert (await browser.import_session(payload, key))["restored"]
 
     try:
         asyncio.run(run())

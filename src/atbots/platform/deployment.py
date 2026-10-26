@@ -82,6 +82,13 @@ def pack_state(store, name, key: bytes, *, activate_destination=False) -> bytes:
         store.turn_lock(name),
         tempfile.TemporaryDirectory(prefix="atbots-state-") as temporary,
     ):
+        if any(
+            j["status"] in {"running", "cancel_requested"}
+            for j in Operations(store).list(name)
+        ):
+            raise StoreError(
+                "Work started before snapshot lock; quiesce it before export"
+            )
         clone = AgentStore(temporary)
         import_definition(clone, export_definition(store, name), allow_remote=True)
         if activate_destination:
@@ -113,7 +120,7 @@ def pack_state(store, name, key: bytes, *, activate_destination=False) -> bytes:
                     ):
                         db.execute("INSERT INTO job_events VALUES (?,?,?,?,?)", row)
                 # Jobs/schedules are private state, never active worker leases.
-                for table in ("jobs", "schedules"):
+                for table in ("jobs", "schedules", "agent_supervision"):
                     schema = source.execute(
                         "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
                         (table,),
@@ -135,7 +142,7 @@ def pack_state(store, name, key: bytes, *, activate_destination=False) -> bytes:
         src, dst = store.workspace(name), clone.workspace(name)
         for path in src.rglob("*"):
             relative = path.relative_to(src)
-            if set(relative.parts) & {"browser", "locks"}:
+            if set(relative.parts) & {"browser", "locks", "atsys-state"}:
                 continue
             if path.is_symlink():
                 raise StoreError("State export refuses symlinks")
@@ -212,7 +219,7 @@ def stage_cloud_state(store, name, plan, key, *, client=None):
         from google.cloud import storage
 
         client = storage.Client(project=plan.project)
-    with store.connect() as db:
+    with store.turn_lock(name), store.connect() as db:
         db.execute("BEGIN IMMEDIATE")
         if store.get(name).state != "paused":
             raise StoreError("Pause the source before private-state handoff")
@@ -303,6 +310,47 @@ def build_container(wheel, image_tag, base_image, *, execute=subprocess.run):
     }
 
 
+def restore_cloud_state(plan, key, destination, *, client=None):
+    """Fence future cloud writers before restoring a new, paused local owner."""
+    import uuid
+
+    if Path(destination).exists() and any(Path(destination).iterdir()):
+        raise StoreError("Cloud restore needs a new empty destination")
+    if client is None:
+        from google.cloud import storage
+
+        client = storage.Client(project=plan.project)
+    bucket_name, path = plan.state_uri[5:].split("/", 1)
+    bucket = client.bucket(bucket_name)
+    lease = bucket.blob(path + ".lease")
+    owner = "local-handoff-" + uuid.uuid4().hex
+    # A live/crashed remote owner prevents this create-only claim. Never steal
+    # that lease or infer absence from a stale heartbeat.
+    lease.upload_from_string(
+        json.dumps({"owner": owner, "handoff": True}), if_generation_match=0
+    )
+    state = bucket.blob(path)
+    state.reload()
+    restored = unpack_state(
+        state.download_as_bytes(if_generation_match=state.generation), destination, key
+    )
+    definitions = restored.list()
+    if len(definitions) != 1:
+        raise StoreError("Cloud restore must contain one agent")
+    definition = definitions[0]
+    paused = restored.configure(
+        definition.name, expected_revision=definition.revision, state="paused"
+    )
+    return {
+        "root": str(restored.root),
+        "agent": paused.name,
+        "state": "paused",
+        "cloud_fence": owner,
+        "source_generation": str(state.generation),
+        "next": "Provision local model credentials, run doctor, then explicitly activate this new local store. Remote lease remains fenced.",
+    }
+
+
 class CloudPlan(Contract):
     project: str = Field(pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$")
     region: str = Field(pattern=r"^[a-z]+-[a-z]+[0-9]$")
@@ -315,12 +363,21 @@ class CloudPlan(Contract):
     state_key_secret: str = Field(pattern=r"^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$")
     model_secret_refs: dict[str, str] = Field(default_factory=dict, max_length=8)
     timeout_seconds: int = Field(default=300, ge=30, le=3600)
+    max_executions: int = Field(default=1, ge=1, le=100)
+    cron: str | None = None
+    timezone: str = "UTC"
     spending_grant_usd: float = Field(gt=0, le=100)
     state_transfer_authorized: bool = False
     acknowledges_not_hard_billing_cap: bool = False
 
     @model_validator(mode="after")
     def explicit_grants(self):
+        if self.cron:
+            from zoneinfo import ZoneInfo
+
+            from apscheduler.triggers.cron import CronTrigger
+
+            CronTrigger.from_crontab(self.cron, timezone=ZoneInfo(self.timezone))
         if (
             not self.state_transfer_authorized
             or not self.acknowledges_not_hard_billing_cap
@@ -332,7 +389,17 @@ class CloudPlan(Contract):
             if (
                 not re.fullmatch(r"[A-Z_][A-Z0-9_]{0,127}", name)
                 or not re.fullmatch(r"[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+", reference)
-                or name in {"ATBOTS_STATE_KEY", "HOME", "PATH"}
+                or name.startswith("ATBOTS_")
+                or name
+                in {
+                    "HOME",
+                    "PATH",
+                    "PYTHONHOME",
+                    "PYTHONPATH",
+                    "LD_PRELOAD",
+                    "LD_LIBRARY_PATH",
+                    "GOOGLE_APPLICATION_CREDENTIALS",
+                }
             ):
                 raise ValueError("Invalid cloud model-secret reference")
         return self
@@ -343,6 +410,39 @@ class CloudRun:
         self.execute = execute
 
     def command(self, plan, action):
+        if action in {"schedule", "unschedule"}:
+            prefix = ["gcloud", "scheduler", "jobs"]
+            common = [
+                "--project",
+                plan.project,
+                "--location",
+                plan.region,
+                "--quiet",
+                "--format=json",
+            ]
+            if action == "unschedule":
+                return prefix + ["delete", plan.job + "-trigger", *common]
+            if not plan.cron:
+                raise ValueError(
+                    "Cloud trigger needs an explicitly approved cron and timezone"
+                )
+            return prefix + [
+                "create",
+                "http",
+                plan.job + "-trigger",
+                *common,
+                "--schedule",
+                plan.cron,
+                "--time-zone",
+                plan.timezone,
+                "--uri",
+                f"https://run.googleapis.com/v2/projects/{plan.project}/locations/{plan.region}/jobs/{plan.job}:run",
+                "--http-method=POST",
+                "--oauth-service-account-email",
+                plan.service_account,
+                "--message-body={}",
+                "--max-retry-attempts=0",
+            ]
         common = [
             "--project",
             plan.project,
@@ -370,7 +470,7 @@ class CloudRun:
                 "--command=python",
                 "--args=-m,atbots.platform.cloud_worker",
                 "--set-env-vars",
-                f"ATBOTS_STATE_URI={plan.state_uri}",
+                f"ATBOTS_STATE_URI={plan.state_uri},ATBOTS_MAX_EXECUTIONS={plan.max_executions}",
                 "--set-secrets",
                 ",".join(
                     [f"ATBOTS_STATE_KEY={plan.state_key_secret}"]
@@ -417,7 +517,9 @@ class CloudRun:
             ) from None
 
     def stop(self, plan, execution):
-        if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", execution):
+        if not isinstance(execution, str) or not re.fullmatch(
+            r"[a-z][a-z0-9-]{0,62}", execution
+        ):
             raise ValueError("Invalid execution ID")
         return self.execute(
             [

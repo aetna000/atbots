@@ -4,6 +4,79 @@ Date: 2026-10-26. Status: implementation in progress; not released.
 Feature directory: `specs/006-agent-control-room`; its name does not limit scope.
 Governing constitution: 4.0.0. Authentication dependency: feature 005.
 
+## Owner correction — 2026-10-27 (supersedes conflicting sharing/setup text)
+
+The published beta is not accepted as a usable complete workflow. Shared provider
+setup must be UI-first: connect once, discover models, choose a connection for
+the control room or any agent, and create an agent through a short guided form.
+Local Ollama remains valid; model switching must not require a working current
+model, memorized commands, model IDs or raw configuration JSON. Anthropic API
+and supported ChatGPT/Copilot sign-in are distinct; unsupported subscription
+OAuth must not be fabricated. Credentials stay in approved OS credential storage.
+
+Every ordinary agent has private AtMem state, automatic applicable recall and
+callable scoped memory tools. No cross-agent recall or sharing is permitted,
+including previously persisted sharing links. This supersedes US3/FR-003/FR-014's
+sharing option. Existing records are retained, never silently migrated/deleted.
+The control-room model receives fleet identity/configuration/status metadata
+only, never agent memories, histories, job objectives or private result bodies.
+An operator can inspect a selected agent's memory in a separate agent view;
+those results must not be fed into the control-room conversation or memory.
+
+Runtime identity and an inspectable environment tool must truthfully identify
+the agent, approved working directory, file permissions, own memory backend,
+own supervision configuration and actual AtFlows wiring. Names alone are not
+proof of available tools, connected services or successful persistence. Native
+Pydantic AI tools remain the execution substrate. Agent tool calls cannot choose
+another agent's ID, workspace or memory database. Memory writes require an
+explicit user instruction or an operator approval; model-generated text must
+not become operator-authenticated memory by implication.
+
+Each agent may have its own AtSys role/configuration and correlated tasks under
+one upstream execution owner. Isolation means scoped state, not duplicate package
+installations or invented supervision. Missing integration must be visible with
+an actionable UI setup route; no fabricated connected/running state.
+The AtSys skill is built in and discoverable by default for ordinary agents.
+"AtSys, do this" prepares a supervised objective through native tools; approved
+roles, acceptance and permissions govern execution. Missing setup is a guided
+UI branch, not a claim of started work or a request to handwrite JSON.
+
+Acceptance: two agents with unique private canaries cannot recall one another;
+the control-room model inputs contain neither canary, even after attempted
+sharing or a memory-inspection request. Real native tools demonstrate own-memory
+search/approved remember, correct workspace reporting and persisted local files.
+Browser walkthrough: provider setup, model selection, control-room switch, agent
+creation with visible permissions, environment/memory inspection and actionable
+errors, without configuration commands. Installation, release and deployment
+remain separate gates; no automatic reinstall/publish is authorized by this fix.
+
+The default `atbots` command opens the UI and starts one local background
+UI/schedule runner per root; `atbots control` retains terminal chat. Closing a
+tab or the launching terminal must not stop the local runner. Idle agents do
+not poll models. PC sleep/offline periods are not continuous operation; boot
+auto-start remains explicit. A paused/archived agent cannot launch even work
+that was queued before it was paused. Already executing consequential work
+requires its execution owner's cancellation, not a pretend rollback.
+
+The UI exposes scoped workspace and component versions, one-shot schedules,
+per-agent AtSys role models/validator/trust, and allowlisted component upgrades.
+Upgrade actions require operator confirmation, quiescent agents/jobs, compatible
+exact versions and an application restart. Installed packages are shared by the
+application environment; private state/configuration is per agent. Archiving
+removes an agent from the active list without deleting its data. Cloud deployment
+is not part of this corrective delivery and must not appear connected/working.
+
+Private supervision setup must use the installed AtSys commands with an
+agent-specific data directory, without restarting a global watchdog. Check both
+dashboard version and watchdog protocol/health before consuming an approval.
+The UI offers explicit Git initialization for a fresh private files workspace
+when the chosen Codex CLI requires a repository; do not bypass its trust check
+or alter global Git configuration. Private AtSys runtime state is excluded from
+portable agent backups; re-provision its execution owner at the destination.
+Browser MCP discovery/negotiation must not launch Chrome. Launch lazily on the
+first granted tool request, reuse one browser lifetime and close it on disconnect;
+browser cold startup must not consume the protocol discovery deadline.
+
 ## Outcome and scope
 
 Install AtBots and manage persistent personal agents through conversation:
@@ -52,12 +125,13 @@ Completion displays deliverables and verification, not just a success badge.
 
 Recall applicable memories before relevant work; capture policy-eligible user
 facts and lessons afterward. Support remember, search, inspect, correct and
-forget through chat. Show sources, lifecycle and scope. Sharing is explicit.
+forget in the selected agent scope. Show sources, lifecycle and scope. No sharing.
 
 Acceptance: capture and recall use the port and AtMem authority APIs; secrets
 are filtered; failed capture is never claimed saved; unrelated agent memories
 are absent. Unverified agent output remains an attributed observation, not a
-verified lesson. Revocation stops future sharing but cannot erase prior exposure.
+verified lesson. Legacy sharing edges cannot authorize new exposure; prior
+exposures cannot be erased by changing future-access policy.
 
 ### US4 — Browser, workspace and skills (P1)
 
@@ -136,8 +210,8 @@ cross-agent access and CSRF are rejected. Credentials/debugging ports stay priva
   management commands while preserving feature-005 authentication commands.
 - FR-002: Persist versioned definitions: stable ID, name, provider/model,
   instructions, workspace, memory scope and grants. Validate before applying.
-- FR-003: Isolate histories, files, browser state and memory. Make sharing explicit,
-  revocable and auditable; do not call directory scoping a code-execution sandbox.
+- FR-003: Isolate histories, files, browser state and memory. Reject cross-agent
+  memory sharing, including persisted legacy edges; do not call directory scoping a code-execution sandbox.
 - FR-004: Support list/inspect/configure/pause/resume/retire, with explicit
   retention/export choices before destructive retirement.
 - FR-005: Use native Pydantic AI Agent/toolsets/message history; expose the Agent
@@ -161,7 +235,7 @@ cross-agent access and CSRF are rejected. Credentials/debugging ports stay priva
 
 - FR-013: Default to an AtMem memory port preserving provenance, admission,
   applicable recall, lifecycle, secret filtering and exposure controls.
-- FR-014: Expose memory search/inspect/correct/forget/sharing through chat and
+- FR-014: Expose scoped memory search/inspect/correct/forget through agent chat and
   explicit operations; enforce authorization below the model-prompt layer.
 - FR-015: Distinguish statements, observations and verified outcomes; do not dump
   unfiltered browser traces into memory or promote output to verified truth.

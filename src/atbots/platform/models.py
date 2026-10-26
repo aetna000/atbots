@@ -118,6 +118,7 @@ class RunLimits(Contract):
 
 
 class Capabilities(Contract):
+    browser_transport: Literal["native", "mcp"] = "native"
     browser_domains: list[str] = Field(default_factory=list, max_length=32)
     browser_actions: list[
         Literal["navigate", "snapshot", "screenshot", "click", "type"]

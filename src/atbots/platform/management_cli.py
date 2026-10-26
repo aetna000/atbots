@@ -68,21 +68,26 @@ def main(argv):
     schedule = commands.add_parser("schedules")
     actions = schedule.add_subparsers(dest="action", required=True)
     actions.add_parser("list")
-    item = actions.add_parser("create")
-    item.add_argument("name")
-    item.add_argument("objective")
-    when = item.add_mutually_exclusive_group(required=True)
-    when.add_argument("--at")
-    when.add_argument("--cron")
-    item.add_argument("--timezone", default="UTC")
-    item.add_argument("--missed", choices=("skip", "catch_up_once"), default="skip")
-    item.add_argument("--overlap", choices=("skip", "queue"), default="skip")
+    for operation in ("create", "edit"):
+        item = actions.add_parser(operation)
+        item.add_argument("name" if operation == "create" else "id")
+        item.add_argument("objective")
+        when = item.add_mutually_exclusive_group(required=True)
+        when.add_argument("--at")
+        when.add_argument("--cron")
+        item.add_argument("--timezone", default="UTC")
+        item.add_argument("--missed", choices=("skip", "catch_up_once"), default="skip")
+        item.add_argument("--overlap", choices=("skip", "queue"), default="skip")
     for action in ("pause", "resume", "delete", "preview"):
         item = actions.add_parser(action)
         item.add_argument("id")
     browser = commands.add_parser("browser")
     browser.add_argument("name")
     browser.add_argument("--url")
+    session = browser.add_mutually_exclusive_group()
+    session.add_argument("--export-session", type=Path)
+    session.add_argument("--import-session", type=Path)
+    browser.add_argument("--key-env", default="ATBOTS_BROWSER_KEY")
     skills = commands.add_parser("skills")
     skills.add_argument("name")
     actions = skills.add_subparsers(dest="action", required=True)
@@ -103,12 +108,25 @@ def main(argv):
     cloud = commands.add_parser("cloud")
     cloud.add_argument(
         "action",
-        choices=("plan", "deploy", "status", "run", "logs", "destroy", "stop", "stage"),
+        choices=(
+            "plan",
+            "deploy",
+            "status",
+            "run",
+            "logs",
+            "destroy",
+            "stop",
+            "stage",
+            "restore",
+            "schedule",
+            "unschedule",
+        ),
     )
     cloud.add_argument("--plan", type=Path, required=True)
     cloud.add_argument("--approve", action="store_true")
     cloud.add_argument("--execution")
     cloud.add_argument("--name")
+    cloud.add_argument("--destination", type=Path)
     cloud.add_argument("--key-env", default="ATBOTS_STATE_KEY")
     memory = commands.add_parser("memory")
     memory.add_argument("name")
@@ -208,9 +226,9 @@ def main(argv):
             else:
                 result = registry.action(args.id, args.action)
     elif args.command == "ui":
-        from atbots.platform.web import serve
+        from atbots.platform.desktop import open_desktop
 
-        serve(store, port=args.port)
+        open_desktop(store, port=args.port)
         return 0
     if args.command == "runner":
         scheduler = Scheduler(store)
@@ -247,6 +265,16 @@ def main(argv):
             )
         elif args.action == "preview":
             result = scheduler.preview(args.id)
+        elif args.action == "edit":
+            result = scheduler.edit(
+                args.id,
+                args.objective,
+                at=args.at,
+                cron=args.cron,
+                zone=args.timezone,
+                missed=args.missed,
+                overlap=args.overlap,
+            )
         else:
             result = scheduler.action(args.id, args.action)
     elif args.command == "browser":
@@ -260,12 +288,33 @@ def main(argv):
             async with BrowserTools(
                 store.workspace(args.name) / "browser", caps
             ) as browser:
+                if args.import_session or args.export_session:
+                    import os
+
+                    key = os.environ.get(args.key_env)
+                    if not key:
+                        raise ValueError(
+                            "Provision the browser-session encryption key using its environment reference"
+                        )
+                    if args.import_session:
+                        await browser.import_session(
+                            args.import_session.read_bytes(), key.encode()
+                        )
                 if args.url:
                     await browser.browser_navigate(args.url)
                 await asyncio.to_thread(
                     input,
                     "Use this agent's browser to sign in. Press Enter here when finished; the isolated profile will be saved. ",
                 )
+                if args.export_session:
+                    import os
+
+                    payload = await browser.export_session(key.encode())
+                    descriptor = os.open(
+                        args.export_session, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                    )
+                    with os.fdopen(descriptor, "wb") as stream:
+                        stream.write(payload)
 
         asyncio.run(handoff())
         return 0
@@ -330,6 +379,17 @@ def main(argv):
                     "Cloud stage needs --name and the provisioned state-key reference"
                 )
             result = stage_cloud_state(store, args.name, plan, key.encode())
+        elif args.action == "restore":
+            import os
+
+            from atbots.platform.deployment import restore_cloud_state
+
+            key = os.environ.get(args.key_env)
+            if not key or not args.destination:
+                raise ValueError(
+                    "Cloud restore needs a new --destination and provisioned encryption-key reference"
+                )
+            result = restore_cloud_state(plan, key.encode(), args.destination)
         else:
             result = adapter.apply(plan, args.action)
     elif args.command == "memory":

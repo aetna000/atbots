@@ -57,6 +57,28 @@ def test_naive_time_and_bad_timezone_refused(tmp_path):
         scheduler.create("researcher", "Do work", cron="* * * * *", zone="not-a-zone")
 
 
+def test_paused_agent_cannot_launch_previously_queued_jobs(tmp_path, monkeypatch):
+    from atbots.platform.jobs import Operations
+    from atbots.platform.store import StoreError
+
+    store, scheduler = setup(tmp_path)
+    job = scheduler.operations.submit("researcher", "Write a report")
+    store.configure("researcher", expected_revision=1, state="paused")
+    launched = []
+    monkeypatch.setattr(
+        scheduler.operations, "launch", lambda identity: launched.append(identity)
+    )
+    scheduler.run_once()
+    assert not launched
+    with pytest.raises(StoreError, match="paused"):
+        Operations(store).claim(job["id"])
+    with pytest.raises(StoreError, match="paused"):
+        Operations(store).launch(job["id"])
+    store.configure("researcher", expected_revision=2, state="active")
+    scheduler.run_once()
+    assert launched == [job["id"]]
+
+
 def test_dst_gap_skipped_fold_has_distinct_occurrences_and_edit(tmp_path):
     from atbots.platform.scheduler import aware
 

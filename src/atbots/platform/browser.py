@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -134,6 +135,55 @@ class BrowserTools:
             raise PermissionError("Authentication challenge requires human takeover")
         await element.fill(text, timeout=5000)
         return "Field filled"
+
+    async def export_session(self, key: bytes) -> bytes:
+        """Operator-only encrypted provisioning; deliberately not a model tool."""
+        from cryptography.fernet import Fernet
+
+        state = await self.browser.storage_state()
+        domains = set(self.capabilities.browser_domains)
+        state["cookies"] = [
+            c for c in state["cookies"] if c["domain"].lstrip(".") in domains
+        ]
+        state["origins"] = [
+            o for o in state["origins"] if self.allowed_url(o["origin"])
+        ]
+        payload = {
+            "format": "atbots-browser-session-v1",
+            "domains": sorted(domains),
+            "state": state,
+        }
+        return Fernet(key).encrypt(json.dumps(payload).encode())
+
+    async def import_session(self, payload: bytes, key: bytes):
+        from cryptography.fernet import Fernet
+
+        if len(payload) > 2_000_000:
+            raise ValueError("Browser session exceeds 2 MB provisioning limit")
+        content = json.loads(Fernet(key).decrypt(payload))
+        domains = set(self.capabilities.browser_domains)
+        if (
+            content.get("format") != "atbots-browser-session-v1"
+            or set(content.get("domains", [])) != domains
+        ):
+            raise PermissionError(
+                "Browser provisioning must match the exact approved domain set"
+            )
+        state = content["state"]
+        if any(c["domain"].lstrip(".") not in domains for c in state["cookies"]) or any(
+            not self.allowed_url(o["origin"]) for o in state["origins"]
+        ):
+            raise PermissionError("Browser session contains an unauthorized domain")
+        await self.browser.add_cookies(state["cookies"])
+        # Restore localStorage only on the approved origin; no script/page data
+        # is returned to a model or printed into ordinary logs.
+        for origin in state["origins"]:
+            await self.page.goto(origin["origin"], wait_until="domcontentloaded")
+            await self.page.evaluate(
+                "entries => { for (const entry of entries) localStorage.setItem(entry.name, entry.value); }",
+                origin.get("localStorage", []),
+            )
+        return {"restored": True, "domains": sorted(domains), "tokens_logged": False}
 
     def tools(self):
         return [

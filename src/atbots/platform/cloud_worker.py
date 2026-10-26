@@ -32,9 +32,15 @@ def main():
     )
     lease.reload()
     lease_generation = lease.generation
+    checkpointed = False
     try:
         state.reload()
         generation = state.generation
+        count = int((state.metadata or {}).get("atbots_executions", "0"))
+        limit = int(os.environ.get("ATBOTS_MAX_EXECUTIONS", "1"))
+        if not 1 <= limit <= 100 or count >= limit:
+            checkpointed = True  # no inference or external side effect occurred
+            raise RuntimeError("Cloud execution allowance exhausted; review a new plan")
         payload = state.download_as_bytes(if_generation_match=generation)
         with tempfile.TemporaryDirectory(prefix="atbots-cloud-") as directory:
             key = os.environ["ATBOTS_STATE_KEY"].encode()
@@ -61,12 +67,20 @@ def main():
                     != token
                 ):
                     raise RuntimeError("Cloud state writer has been fenced")
+                state.metadata = {
+                    **(state.metadata or {}),
+                    "atbots_executions": str(count + 1),
+                }
                 state.upload_from_string(
                     pack_state(store, agents[0].name, key),
                     if_generation_match=generation,
                 )
+                checkpointed = True
     finally:
-        lease.delete(if_generation_match=lease_generation)
+        # Retain ownership if checkpoint upload is uncertain. Otherwise a later
+        # execution could replay stale state after consequential external effects.
+        if checkpointed:
+            lease.delete(if_generation_match=lease_generation)
 
 
 if __name__ == "__main__":

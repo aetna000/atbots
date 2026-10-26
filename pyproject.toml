@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atbots"
-version = "0.3.0b1"
+version = "0.3.0b2"
 description = "Pydantic AI, already set up: a general-purpose agent with tasks, skills, and pluggable memory."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,6 +15,12 @@ dependencies = [
   "pydantic>=2.7",
   "pydantic-ai-slim[openai]>=2.61,<3",
   "filelock>=3.15,<4",
+  "keyring>=25,<26",
+  "APScheduler>=3.11,<4",
+  "tzdata>=2025.1",
+  "pydantic-ai-slim[anthropic]>=2.61,<3",
+  "atsys>=0.3.0b4,<0.4",
+  "packaging>=24",
 ]
 
 [project.urls]
@@ -23,7 +29,7 @@ Repository = "https://github.com/aetna000/atbots"
 Issues = "https://github.com/aetna000/atbots/issues"
 
 [project.optional-dependencies]
-browser = ["playwright>=1.50,<2"]
+browser = ["playwright>=1.50,<2", "cryptography>=43", "pydantic-ai-slim[mcp]>=2.61,<3", "mcp>=2.3,<3"]
 schedule = ["APScheduler>=3.11,<4", "tzdata>=2025.1"]
 supervision = ["atsys>=0.3.0b4,<0.4", "packaging>=24"]
 cloud = ["google-cloud-storage>=3,<4", "cryptography>=43", "APScheduler>=3.11,<4"]
@@ -37,6 +43,7 @@ anthropic = [
 ]
 evals = [
   "pydantic-evals>=2.40,<3",
+  "python-dotenv>=1,<2",
 ]
 dev = [
   "pytest>=8.0",
@@ -50,7 +57,7 @@ atbots = "atbots.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"atbots.platform" = ["*.html", "*.Dockerfile"]
+"atbots.platform" = ["*.html", "*.js", "*.css", "*.md", "*.Dockerfile"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

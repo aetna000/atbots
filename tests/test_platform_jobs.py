@@ -94,8 +94,10 @@ def test_memory_approval_invalidated_by_changed_record(tmp_path):
     memory = AtMemMemory(store, "researcher")
     record = memory.remember("I prefer concise technical answers")["record_ids"][0]
     room = ControlRoom(store, model=TestModel())
-    proposal = room.dispatch(
-        ControlPlan(action="memory_forget", name="researcher", record_id=record)
+    from atbots.platform.environment import AgentEnvironment
+
+    proposal = AgentEnvironment(store, "researcher", memory).request_memory_change(
+        "forget", record
     )
     memory.correct(record, "I prefer detailed technical answers")
     with pytest.raises(StoreError, match="Memory changed"):

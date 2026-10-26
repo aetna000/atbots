@@ -7,6 +7,7 @@ from atbots.platform.deployment import (
     export_definition,
     import_definition,
     pack_state,
+    restore_cloud_state,
     stage_cloud_state,
     unpack_state,
 )
@@ -140,3 +141,50 @@ def test_archive_preserves_job_event_trail(tmp_path):
         pack_state(store, "researcher", key), tmp_path / "destination", key
     )
     assert Operations(restored).get(job["id"])["events"][0]["kind"] == "queued"
+
+
+def test_restore_cloud_claims_remote_lease_and_returns_paused_local_owner(tmp_path):
+    from types import SimpleNamespace
+
+    source = AgentStore(tmp_path / "source")
+    source.create("researcher")
+    key = Fernet.generate_key()
+    payload = pack_state(source, "researcher", key)
+    claims = []
+    lease = SimpleNamespace(
+        upload_from_string=lambda payload, **kwargs: claims.append(kwargs)
+    )
+    state = SimpleNamespace(
+        generation=9, reload=lambda: None, download_as_bytes=lambda **kwargs: payload
+    )
+    client = SimpleNamespace(
+        bucket=lambda name: SimpleNamespace(
+            blob=lambda path: lease if path.endswith(".lease") else state
+        )
+    )
+    plan = SimpleNamespace(project="fixture", state_uri="gs://fixture/state")
+    result = restore_cloud_state(plan, key, tmp_path / "destination", client=client)
+    assert claims == [{"if_generation_match": 0}]
+    assert result["state"] == "paused" and result["cloud_fence"].startswith(
+        "local-handoff-"
+    )
+    assert AgentStore(tmp_path / "destination").get("researcher").state == "paused"
+
+
+def test_cloud_trigger_targets_jobs_api_with_oauth_and_no_retry():
+    from types import SimpleNamespace
+
+    plan = SimpleNamespace(
+        project="fixture",
+        region="us-central1",
+        job="researcher",
+        cron="0 9 * * *",
+        timezone="UTC",
+        service_account="fixture@example.invalid",
+    )
+    argv = CloudRun().command(plan, "schedule")
+    assert (
+        "https://run.googleapis.com/v2/projects/fixture/locations/us-central1/jobs/researcher:run"
+        in argv
+    )
+    assert "--oauth-service-account-email" in argv and "--max-retry-attempts=0" in argv

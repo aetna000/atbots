@@ -36,16 +36,16 @@ ask: send the user's message to an existing agent.
 work: submit the message as a background objective for name; requires approval.
 jobs/job_status: inspect durable job state; job_status needs job_id.
 job_cancel/job_pause/job_resume: approved task control with job_id.
-schedule_create/schedules/schedule_pause/schedule_resume/schedule_delete: durable scheduling with explicit timezone and policies.
+schedule_create/schedule_edit/schedules/schedule_pause/schedule_resume/schedule_delete: durable scheduling with explicit timezone and policies; edit needs exact schedule_id.
 supervise: approved AtSys objective with explicit role configuration and validator; supervision field is required.
 supervision_status/supervision_report: read recorded upstream state or report with exact delegation_id.
 supervision_pause/supervision_resume/supervision_stop/supervision_amend: approved upstream controls; amendments change objective only, not permissions.
 atflows_connect: approved compatible-provider tracing endpoint in message; not subscription OAuth.
 export: portable configuration without private state or credentials.
 cloud_plan/cloud_deploy/cloud_status/cloud_run/cloud_logs/cloud_destroy: explicit pinned-image Cloud Run plan with spending and state-transfer grants.
-memory_search/memory_inspect: read an agent's memory (message is the search query).
-memory_remember/memory_correct/memory_forget: approved memory changes; correction/forget need exact record_id.
-memory_share/memory_revoke: approved directional read sharing from name to recipient.
+Private agent memory is not a control-room operation. Direct the operator to select the agent and open Memory. Never request or summarize that agent's private memory here.
+Private memory is not available to the control-room model. Direct the operator
+to the selected agent's Memory view for memory operations. Never request sharing.
 clarify: ask a question when the target or intent is unclear or outside these operations.
 For example, 'Create a local agent named researcher' means action=create,
 name=researcher, other fields null. It is not a deployment request.
@@ -78,6 +78,7 @@ class ControlPlan(Contract):
         "job_pause",
         "job_resume",
         "schedule_create",
+        "schedule_edit",
         "schedules",
         "schedule_pause",
         "schedule_resume",
@@ -150,14 +151,18 @@ class ControlPlan(Contract):
         if self.action == "work" and not (self.message or "").strip():
             raise ValueError("Background work requires an objective")
         if (
-            self.action in {"schedule_create", "supervise", "atflows_connect"}
+            self.action
+            in {"schedule_create", "schedule_edit", "supervise", "atflows_connect"}
             and not (self.message or "").strip()
         ):
             raise ValueError("This operation requires message text")
-        if self.action == "schedule_create" and bool(self.at) == bool(self.cron):
+        if self.action in {"schedule_create", "schedule_edit"} and bool(
+            self.at
+        ) == bool(self.cron):
             raise ValueError("Choose an explicit time or cron expression")
         if (
-            self.action in {"schedule_pause", "schedule_resume", "schedule_delete"}
+            self.action
+            in {"schedule_edit", "schedule_pause", "schedule_resume", "schedule_delete"}
             and not self.schedule_id
         ):
             raise ValueError("Exact schedule ID required")
@@ -230,18 +235,23 @@ class ControlRoom:
         model=None,
         clock=time.time,
         session_factory=AgentSession,
+        model_settings=None,
     ):
         self.store, self.clock = store, clock
         self.operations = Operations(store)
         self.session_factory = session_factory
         if not any(a.name == CONTROL_NAME for a in store.list()):
             store.create(CONTROL_NAME, instructions=MANAGEMENT_INSTRUCTIONS)
+        session_options = {}
+        if model_settings is not None:
+            session_options["model_settings"] = model_settings
         self.session = session_factory(
             store,
             CONTROL_NAME,
             model=model,
             output_type=PromptedOutput(ControlPlan),
             memory=None,
+            **session_options,
         )
 
     def plan(self, message: str) -> ControlPlan:
@@ -255,11 +265,29 @@ class ControlRoom:
             for a in self.store.list()
         ]
         turn = self.session.chat(
-            json.dumps({"registry": registry, "user_request": message})
+            json.dumps(
+                {
+                    "registry": registry,
+                    "user_request": message,
+                    "jobs": [
+                        {key: job[key] for key in ("id", "agent", "status")}
+                        for job in self.operations.list()[-30:]
+                    ],
+                    "schedules": [
+                        {key: entry[key] for key in ("id", "agent", "enabled", "next")}
+                        for entry in Scheduler(self.store).list()[-30:]
+                    ],
+                    "delegations": Delegations(self.store).list()[-30:],
+                }
+            )
         )
         return ControlPlan.model_validate(turn.structured)
 
     def dispatch(self, plan: ControlPlan) -> dict:
+        if plan.action.startswith("memory_"):
+            raise StoreError(
+                "Private memory is available only in the selected agent's Memory view, not control-room planning"
+            )
         if plan.action.startswith("supervision_"):
             link = Delegations(self.store).get(plan.delegation_id)
             if link["agent"] != plan.name:
@@ -311,7 +339,8 @@ class ControlRoom:
                 "schedules": Scheduler(self.store).list(plan.name),
             }
         if (
-            plan.action in {"schedule_pause", "schedule_resume", "schedule_delete"}
+            plan.action
+            in {"schedule_edit", "schedule_pause", "schedule_resume", "schedule_delete"}
             and Scheduler(self.store).get(plan.schedule_id)["agent"] != plan.name
         ):
             raise StoreError("Schedule belongs to another agent")
@@ -387,12 +416,29 @@ class ControlRoom:
         }
 
     def approve(self, identity: str) -> dict:
-        entry = self.operations.consume(identity, now=self.clock())
+        entry = self.operations.consume(identity, now=self.clock(), preview=True)
         plan, revision = ControlPlan.model_validate(entry["plan"]), entry["revision"]
         if self._memory_digest(plan) != entry["memory_digest"]:
             raise StoreError(
                 "Memory changed; request approval against the current record"
             )
+        if plan.action == "supervise":
+            if self.store.get(plan.name).revision != revision:
+                raise StoreError(
+                    "Agent configuration changed; request a fresh supervision approval"
+                )
+            AtSysClient(plan.supervision.endpoint).readiness()
+            providers = {plan.supervision.worker, plan.supervision.supervisor_provider}
+            if plan.supervision.allow_repair:
+                providers.add(plan.supervision.repair_provider)
+            if (
+                "codex" in providers
+                and not (self.store.workspace(plan.name) / "files" / ".git").exists()
+            ):
+                raise StoreError(
+                    "Codex requires a repository in this agent's workspace. Open Supervision, enable workspace Git initialization and choose Start private AtSys. This approval has not been consumed"
+                )
+        self.operations.consume(identity, now=self.clock())
         result = self._apply(plan, revision)
         self.operations.finish_approval(identity, result)
         return result
@@ -407,6 +453,22 @@ class ControlRoom:
         return None
 
     def _apply(self, plan, revision):
+        if plan.action == "schedule_edit":
+            scheduler = Scheduler(self.store)
+            if scheduler.get(plan.schedule_id)["agent"] != plan.name:
+                raise StoreError("Schedule belongs to another agent")
+            return {
+                "speaker": "control-room",
+                "schedule": scheduler.edit(
+                    plan.schedule_id,
+                    plan.message,
+                    at=plan.at,
+                    cron=plan.cron,
+                    zone=plan.timezone,
+                    missed=plan.missed,
+                    overlap=plan.overlap,
+                ),
+            }
         if plan.action.startswith("supervision_"):
             link = Delegations(self.store).get(plan.delegation_id)
             if link["agent"] != plan.name:
