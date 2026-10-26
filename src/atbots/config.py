@@ -22,6 +22,14 @@ class ProviderConfig:
     api_key_env: str | None = None
     egress_class: str = "local"
     num_ctx: int | None = None
+    auth_profile: str = "default"
+
+    def __post_init__(self) -> None:
+        if self.kind in {"chatgpt", "github-copilot", "anthropic"}:
+            if self.egress_class != "remote":
+                raise ValueError(f"{self.kind} requires egress_class='remote'")
+            if not self.model.strip():
+                raise ValueError("an explicit provider model is required")
 
 
 @dataclass(slots=True)

@@ -6,6 +6,13 @@
 
 **Status**: Draft
 
+> Governance update, 2026-10-26: this historical developer-package baseline is
+> not the complete current scope. Constitution 4.0.0 and feature 006 supersede
+> FR-015, the optional-only restriction in FR-018, SC-004, US3/AC5 and assumptions
+> excluding end-user interfaces, dashboards and deployment. AtMem is now default
+> behind a replaceable port. Native Pydantic AI, explicit remote access and
+> inspectability remain required. See `../006-agent-control-room/spec.md`.
+
 **Input**: User description: "atbots is a Python package on PyPI. When a user installs it they get Pydantic AI, customised — with tasks, skills, and memory. It is a thin layer. Memory is one pluggable option among many (AtMem, mem0, or any other); nothing is necessarily linked to a single backend. AtBots is not the intelligence layer for any other product."
 
 ## User Scenarios & Testing *(mandatory)*

@@ -13,6 +13,12 @@ class ModelRouter:
         self.config = config
         self._providers: list[ModelProvider] = []
         for row in config.providers:
+            if row.kind in {"chatgpt", "github-copilot", "anthropic"}:
+                from atbots.providers.authenticated import AuthenticatedProvider
+                self._providers.append(AuthenticatedProvider(
+                    row, capability_refs=config.pydantic_capabilities, retries=config.step_retries
+                ))
+                continue
             if row.kind in {"ollama", "openai-compatible"}:
                 self._providers.append(
                     PydanticAIProvider(
@@ -40,6 +46,9 @@ class ModelRouter:
                 continue
             if provider.available():
                 return provider
+            if remote and getattr(provider, "kind", None) in {"chatgpt", "github-copilot", "anthropic"}:
+                from atbots.auth import AuthError
+                raise AuthError(provider.unavailable_reason or "Selected account provider unavailable")
         return DeterministicLocalProvider()
 
     def status(self) -> list[dict[str, object]]:
@@ -49,6 +58,8 @@ class ModelRouter:
                 "model": provider.model,
                 "egress_class": provider.egress_class,
                 "available": provider.available(),
+                **({"authentication": provider.kind, "inference_access": "unverified"}
+                   if getattr(provider, "kind", None) in {"chatgpt", "github-copilot", "anthropic"} else {}),
                 **_context_status(provider),
             }
             for provider in self._providers

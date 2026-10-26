@@ -6,6 +6,12 @@
 
 **Status**: Draft
 
+> Governance update, 2026-10-26: constitution 4.0.0 and feature 006 require native
+> Pydantic AI execution for the new platform rather than another custom agent
+> loop. Bounded recovery, useful failures, local models and regression evaluation
+> remain required. Migration must demonstrate preserved behavior, not claim the
+> existing hand-written harness is already native execution.
+
 **Input**: User description: "Loops for AtBots to work for small models like qwen3:4b."
 
 ## Context

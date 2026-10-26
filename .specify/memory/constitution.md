@@ -17,6 +17,23 @@ Sync Impact Report
 
 # AtBots Constitution
 
+## Amendment 4.0.0 — User-owned agent platform
+
+On 2026-10-26 the owner expanded AtBots from a developer-oriented package to
+a user-owned platform for persistent agents, conversational configuration,
+browser work, schedules and portable deployment. This MAJOR amendment replaces
+III's memory-vendor prohibition and the customer-UI prohibition in Public
+Surface. AtMem becomes the default behind a replaceable memory port. AtFlows
+and AtSys are optional integrations, not hidden agent-loop implementations.
+The historical sync report above describes 3.0.0, not current policy.
+
+Migration: feature 006 supersedes the conflicting memory, audience and
+dashboard restrictions in feature 001. Existing local/model behavior and
+feature-005 authentication protections remain required. Legacy companion
+surfaces and the custom outer loop require an explicit migration inventory;
+this amendment neither certifies them nor authorizes silent removal. Required
+replacements, compatibility checks and user-visible removals must be documented.
+
 ## Core Principles
 
 ### I. The Product Is an Installable Package
@@ -28,8 +45,11 @@ NOT be positioned as a subordinate layer, sidecar, extraction worker, or
 ranking service for any other product. It MUST NOT ship a hosted dashboard or
 a service protocol that exists to serve another system.
 
-Rationale: Users install an agent and build with it. Any framing in which
-AtBots exists to serve another product inverts who the customer is.
+Rationale: Users install and control their own agents. Named workspaces,
+terminal and web control-room clients, local runners and deployable workers
+are parts of the same product, without requiring an AtBots-hosted service.
+Users MUST be able to configure ordinary operations through conversation
+without memorizing CLI commands.
 
 ### II. Thin Layer Over Pydantic AI
 
@@ -51,22 +71,24 @@ Concretely:
 Rationale: The promise is "Pydantic AI, already set up." A parallel framework
 would split maintenance, lag upstream, and break that promise.
 
-### III. Memory Is a Pluggable Port
+### III. AtMem by Default, Memory Through a Port
 
-Memory MUST be defined as a provider interface (store, recall, and their
-async equivalents) with no vendor named in the core package. Any backend that
-satisfies the interface is equally supported: an in-process default, mem0,
-AtMem, a vector store, or a user-written class.
+AtMem MUST be the first-party default persistent-memory integration. A typed
+memory interface MUST keep task, tool and skill code independent of backend
+implementation. Users MAY replace it without rewriting objectives. Replacement
+MUST NOT imply an unsupported migration of existing records.
 
-- Core `atbots` MUST NOT depend on, import, or reference a specific
-  third-party memory product.
-- Backend integrations, if shipped at all, MUST be optional extras that fail
-  with a clear installation message when the backend is absent.
-- Switching backends MUST NOT require rewriting tasks, skills, or tools.
-- Vendor-specific setup belongs in documentation, not in the core contract.
+- Each named agent MUST have an isolated memory scope by default. Sharing MUST
+  identify source, recipient, allowed operations and revocation behavior.
+- Memory, conversations, checkpoints and credential storage MUST remain distinct.
+  A conversation log is not automatically verified memory.
+- Recall and capture MUST preserve provenance and the backend's governance,
+  secret filtering, lifecycle and exposure controls.
+- Memory failures MUST be visible; failed writes MUST NOT be called saved.
+- Credentials MUST NOT enter memories, model prompts or ordinary run logs.
 
-Rationale: Memory backends are a competitive, fast-moving field. Binding the
-package to one makes AtBots that vendor's client instead of the user's agent.
+Rationale: AtMem gives the default product durable, inspectable understanding
+without coupling the execution contract to its storage implementation.
 
 ### IV. Tasks, Skills, and Tools
 
@@ -93,18 +115,54 @@ tasks, tools, or skills. Install MUST NOT silently download a large model or
 create a remote API key.
 
 Rationale: Local work stays possible without a vendor. Remote work is a
-conscious choice.
+conscious choice. Every agent MUST have an explicit provider/model binding;
+silent paid-provider substitution is forbidden. Login is not proof of model
+entitlement or a promise of subscription-funded inference.
+
+### VI. One Execution Owner and Inspectable Supervision
+
+- AtBot owns conversation, tools and ordinary tasks; Pydantic AI owns its
+  model/tool loop. AtFlows MAY own a defined procedure. AtSys MAY own a delegated
+  worker/observer/supervisor objective. Each executable unit MUST record one
+  owner; overlapping schedulers or competing recovery authorities are forbidden.
+- AtSys worker, observer and supervisor model bindings MUST be explicit.
+- Status MUST derive from recorded execution events with identity, timestamp
+  and freshness. Unknown, unreachable or blocked MUST NOT appear as running.
+- Completion MUST expose deliverables and verification state, not only process
+  exit. Recovery MUST be bounded and escalate actual blockers.
+- Unconditional success guarantees or exactly-once external-effect claims MUST
+  NOT be advertised.
+
+### VII. User Control, Isolation and Portable Execution
+
+- Named agents MUST have scoped workspaces, memory, histories, browser sessions,
+  permissions, models and budgets. Directory scoping MUST NOT be described as
+  a security sandbox for arbitrary executable code.
+- New permissions, executable skills, consequential actions, credential transfer
+  and billable infrastructure MUST require an applicable explicit grant.
+  Plain-English requests MUST use validated operations, not unrestricted generated
+  shell commands. Web content is untrusted input, not management authority.
+- Schedules MUST persist intent, timezone, overlap and missed-run policy.
+  Recovery MUST reconcile uncertain external side effects before replay.
+- Local/cloud runners MUST use portable definitions and explicit secret
+  provisioning, never copy desktop keychains or expose browser debugging ports
+  publicly. Pause, cancellation and resource controls are required.
+- Browser automation MUST respect site restrictions. CAPTCHA/MFA or denied
+  access MUST lead to legitimate user handoff, not bypass mechanisms.
 
 ## Public Surface and Removal
 
 - PyPI name, import name, and CLI name are all `atbots`.
-- Public surfaces are the library API and the CLI. This repository MUST NOT
-  ship a customer dashboard or a companion HTTP protocol.
+- Public surfaces are the library API, CLI and optional first-party web control
+  room. They MUST share validated management operations and authoritative state.
+  A user-facing control-room API is permitted; a companion HTTP protocol whose
+  purpose is to serve another product is not.
 - Retired surfaces MUST be removed, not deprecated in place: companion HTTP
   endpoints, AtMem extraction and ranking, "proposes and ranks" product copy,
   and any CLI verb whose purpose is to serve another product.
-- The public API MUST be small enough to document on one page. Growth in
-  surface area requires justification against Principle II.
+- The public API MUST distinguish management, model execution, memory and optional
+  integrations. Growth requires justification against II; integrations MUST reuse
+  upstream protocols rather than replicate their engines.
 
 ## Quality and Safety
 
@@ -119,10 +177,9 @@ conscious choice.
 
 ## Governance
 
-This constitution supersedes conflicting code, copy, and older specs. If a
-plan or task would make AtBots the intelligence layer of another product, or
-would bind core memory to a named vendor, the plan is wrong until this file is
-amended.
+This constitution supersedes conflicting code, copy, and older specs. A plan
+making AtBots subordinate to another product, bypassing the memory port or
+introducing a second agent loop is wrong until this constitution is amended.
 
 Amendments MUST:
 1. Record the change here with a version bump.
@@ -137,11 +194,12 @@ Versioning:
 - PATCH: clarification, wording, or non-semantic refinement.
 
 Compliance review: every `/speckit-plan` and `/speckit-analyze` run MUST check
-these gates. Pull requests that add a second agent loop, a vendor dependency
-in core memory, or a service protocol for another product require a
-constitution amendment first.
+these gates. Pull requests that add a second agent loop, bypass the replaceable
+memory port, or introduce a service protocol subordinate to another product
+require a constitution amendment first. The default AtMem adapter and a
+first-party control room are explicitly permitted by version 4.0.0.
 
 Every bounded product change MUST follow Spec Kit: constitution, then
 `spec.md`, then `plan.md`, then `tasks.md`, then implement, then converge.
 
-**Version**: 3.0.0 | **Ratified**: 2026-08-30 | **Last Amended**: 2026-09-05
+**Version**: 4.0.0 | **Ratified**: 2026-08-30 | **Last Amended**: 2026-10-26
