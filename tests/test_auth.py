@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import time
+import uuid
 from dataclasses import asdict
 from types import SimpleNamespace
 
@@ -268,6 +270,87 @@ def test_native_keychain_roundtrip(monkeypatch):
     store.save("chatgpt", "default", credentials())
     assert store.load("chatgpt", "default")["credentials"]["client_id"] == "test-client"
     assert store.delete("chatgpt", "default") and not store.delete("chatgpt", "default")
+
+
+def test_windows_large_credentials_rotation_and_failure(monkeypatch):
+    import keyring
+
+    data = {}
+    class Backend:
+        __module__ = "keyring.backends.Windows"
+        priority = 5
+        fail = False
+
+        def get_password(self, service, account):
+            return data.get((service, account))
+
+        def set_password(self, service, account, value):
+            assert len(value.encode("utf-16-le")) <= 2560
+            if self.fail and service == auth.SERVICE:
+                raise RuntimeError("secret")
+            data[service, account] = value
+
+        def delete_password(self, service, account):
+            del data[service, account]
+
+    backend = Backend()
+    monkeypatch.setattr(keyring, "get_keyring", lambda: backend)
+    store = auth.CredentialStore()
+    original = credentials()
+    original.access_token = "a" * 8000 + "😀"
+    store.save("chatgpt", "default", original)
+    assert store.load("chatgpt", "default")["credentials"]["access_token"] == original.access_token
+    old_data = data.copy()
+    backend.fail = True
+    with pytest.raises(auth.AuthError):
+        store.save("chatgpt", "default", credentials())
+    assert data == old_data
+    backend.fail = False
+    store.save("chatgpt", "default", credentials())
+    assert store.load("chatgpt", "default")["credentials"]["access_token"] == "access-secret"
+    assert store.delete("chatgpt", "default")
+    assert not data
+
+
+def test_windows_reads_legacy_credential_and_rejects_missing_chunk(monkeypatch):
+    import keyring
+
+    data = {(auth.SERVICE, "chatgpt:default"): json.dumps({"version": 1, "credentials": {"access_token": "old"}})}
+    Backend = type("Keyring", (), {
+        "__module__": "keyring.backends.Windows", "priority": 5,
+        "get_password": lambda _, s, k: data.get((s, k)),
+        "set_password": lambda _, s, k, v: data.__setitem__((s, k), v),
+        "delete_password": lambda _, s, k: data.pop((s, k)),
+    })
+    monkeypatch.setattr(keyring, "get_keyring", lambda: Backend())
+    store = auth.CredentialStore()
+    assert store.load("chatgpt", "default")["credentials"]["access_token"] == "old"
+    store.save("chatgpt", "default", credentials())
+    manifest = json.loads(data[auth.SERVICE, "chatgpt:default"])
+    del data[store._chunk_services("chatgpt:default", manifest)[0], "chatgpt:default"]
+    with pytest.raises(auth.AuthError, match="Cannot read"):
+        store.load("chatgpt", "default")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows Credential Manager")
+@pytest.mark.parametrize("provider", ["chatgpt", "github-copilot"])
+def test_windows_real_credential_manager_large_synthetic_authorization(provider):
+    from dataclasses import dataclass
+
+    @dataclass
+    class SyntheticCredentials:
+        access_token: str
+        refresh_token: str
+
+    profile = "test-" + uuid.uuid4().hex
+    store = auth.CredentialStore()
+    assert type(store.backend).__module__ == "keyring.backends.Windows"
+    value = SyntheticCredentials("a" * 8000, "b" * 8000)
+    try:
+        store.save(provider, profile, value)
+        assert store.load(provider, profile)["credentials"] == asdict(value)
+    finally:
+        store.delete(provider, profile)
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,7 @@ from urllib.request import ProxyHandler, build_opener
 
 from pydantic import Field
 
-from atbots.auth import AuthError, CredentialStore, auth_status, login, profile_lock
+from atbots.auth import CHUNK_SIZE, MAX_CHUNKS, AuthError, CredentialStore, auth_status, login, profile_lock
 from atbots.platform.memory import screen_message
 from atbots.platform.models import Contract, ModelBinding
 from atbots.platform.store import StoreError
@@ -31,6 +31,13 @@ class APIKeys:
         self.validate(profile)
         try:
             value = self.backend.get_password(KEY_SERVICE, profile)
+            if value and value.startswith('{"format": "chunks-v1"'):
+                manifest = json.loads(value)
+                services = CredentialStore._chunk_services(self, profile, manifest)
+                chunks = [self.backend.get_password(service, profile) for service in services]
+                if not services or any(not isinstance(chunk, str) for chunk in chunks):
+                    raise ValueError("Missing credential chunk")
+                value = json.loads("".join(chunks))
         except Exception:  # noqa: BLE001 - keychain errors can contain credential values
             raise AuthError("Unlock the OS keychain to use this connection") from None
         if not value:
@@ -46,7 +53,27 @@ class APIKeys:
         ):
             raise AuthError("Enter a valid API credential without whitespace")
         try:
-            self.backend.set_password(KEY_SERVICE, profile, value)
+            if type(self.backend).__module__ == "keyring.backends.Windows":
+                raw = json.dumps(value, ensure_ascii=True)
+                count = max(1, (len(raw) + CHUNK_SIZE - 1) // CHUNK_SIZE)
+                if count > MAX_CHUNKS:
+                    raise ValueError("Credential exceeds storage limit")
+                old = self.backend.get_password(KEY_SERVICE, profile)
+                old_services = CredentialStore._chunk_services(self, profile, json.loads(old)) if old and old.startswith('{"format": "chunks-v1"') else []
+                manifest = {"format": "chunks-v1", "generation": uuid.uuid4().hex, "count": count}
+                services = CredentialStore._chunk_services(self, profile, manifest)
+                written = []
+                try:
+                    for i, service in enumerate(services):
+                        written.append(service)
+                        self.backend.set_password(service, profile, raw[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE])
+                    self.backend.set_password(KEY_SERVICE, profile, json.dumps(manifest))
+                except Exception:
+                    CredentialStore._cleanup_chunks(self, profile, written)
+                    raise
+                CredentialStore._cleanup_chunks(self, profile, old_services)
+            else:
+                self.backend.set_password(KEY_SERVICE, profile, value)
         except Exception:  # noqa: BLE001 - keychain errors can contain credential values
             raise AuthError(
                 "Cannot save the API credential in the OS keychain"
