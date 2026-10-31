@@ -130,6 +130,9 @@ def test_windows_real_credential_manager_large_synthetic_api_key():
     try:
         keys.save(profile, value)
         assert keys.load(profile) == value
+        value = "synthetic-replacement-" + "z" * 6000
+        keys.save(profile, value)
+        assert keys.load(profile) == value
     finally:
         raw = keys.backend.get_password(module.KEY_SERVICE, profile)
         if raw:
