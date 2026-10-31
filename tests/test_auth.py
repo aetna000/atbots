@@ -349,6 +349,9 @@ def test_windows_real_credential_manager_large_synthetic_authorization(provider)
     try:
         store.save(provider, profile, value)
         assert store.load(provider, profile)["credentials"] == asdict(value)
+        value.access_token = "rotated-" + "c" * 6000
+        store.save(provider, profile, value)
+        assert store.load(provider, profile)["credentials"] == asdict(value)
     finally:
         store.delete(provider, profile)
 
