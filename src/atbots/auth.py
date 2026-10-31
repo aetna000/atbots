@@ -12,6 +12,7 @@ import importlib
 import json
 import math
 import re
+import secrets
 import time
 import webbrowser
 from collections.abc import Callable, Iterator
@@ -23,6 +24,8 @@ from atbots.config import DEFAULT_ROOT
 
 PROVIDERS = ("chatgpt", "github-copilot")
 SERVICE = "atbots.provider-auth.v1"
+CHUNK_SIZE = 1000  # ASCII characters; at most 2000 bytes with Windows UTF-16 storage
+MAX_CHUNKS = 128
 ANTHROPIC_NOTICE = (
     "Claude.ai subscription OAuth is not supported in this third-party app. "
     "Use kind='anthropic' with an explicitly configured Anthropic API key, "
@@ -83,13 +86,37 @@ class CredentialStore:
                 'OS credential store unavailable; install "atbots[auth]" and unlock your keychain'
             ) from None
 
+    def _chunk_services(self, account: str, manifest: Any) -> list[str]:
+        if not isinstance(manifest, dict) or manifest.get("format") != "chunks-v1":
+            return []
+        generation, count = manifest.get("generation"), manifest.get("count")
+        if (not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{32}", generation)
+                or type(count) is not int or not 1 <= count <= MAX_CHUNKS):
+            raise ValueError("Invalid credential manifest")
+        account_hash = hashlib.sha256(account.encode()).hexdigest()
+        return [f"{SERVICE}.chunk.{account_hash}.{generation}.{i}" for i in range(count)]
+
+    def _cleanup_chunks(self, account: str, services: list[str]) -> None:
+        for service in services:
+            try:
+                self.backend.delete_password(service, account)
+            except Exception:  # best effort after the committed value has changed
+                pass
+
     def load(self, provider: str, profile: str) -> dict[str, Any] | None:
         validate_profile(provider, profile)
         try:
-            raw = self.backend.get_password(SERVICE, f"{provider}:{profile}")
+            account = f"{provider}:{profile}"
+            raw = self.backend.get_password(SERVICE, account)
             if raw is None:
                 return None
             value = json.loads(raw)
+            services = self._chunk_services(account, value)
+            if services:
+                chunks = [self.backend.get_password(service, account) for service in services]
+                if any(not isinstance(chunk, str) for chunk in chunks):
+                    raise ValueError("Missing credential chunk")
+                value = json.loads("".join(chunks))
             if (
                 not isinstance(value, dict)
                 or value.get("version") != 1
@@ -104,16 +131,35 @@ class CredentialStore:
 
     def save(self, provider: str, profile: str, credentials: Any) -> None:
         validate_profile(provider, profile)
+        written = []
+        committed = False
+        account = f"{provider}:{profile}"
         try:
             value = {
                 "version": 1,
                 "issued_at": time.time(),
                 "credentials": asdict(credentials),
             }
-            self.backend.set_password(
-                SERVICE, f"{provider}:{profile}", json.dumps(value)
-            )
+            raw = json.dumps(value, ensure_ascii=True)
+            if type(self.backend).__module__ == "keyring.backends.Windows":
+                old_raw = self.backend.get_password(SERVICE, account)
+                old_services = self._chunk_services(account, json.loads(old_raw)) if old_raw else []
+                count = max(1, (len(raw) + CHUNK_SIZE - 1) // CHUNK_SIZE)
+                if count > MAX_CHUNKS:
+                    raise ValueError("Credential exceeds storage limit")
+                manifest = {"format": "chunks-v1", "generation": secrets.token_hex(16), "count": count}
+                services = self._chunk_services(account, manifest)
+                for i, service in enumerate(services):
+                    written.append(service)
+                    self.backend.set_password(service, account, raw[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE])
+                self.backend.set_password(SERVICE, account, json.dumps(manifest))
+                committed = True
+                self._cleanup_chunks(account, old_services)
+            else:
+                self.backend.set_password(SERVICE, account, raw)
         except Exception:  # noqa: BLE001 - persistence failures must not echo tokens
+            if not committed:
+                self._cleanup_chunks(account, written)
             raise AuthError(
                 "Cannot persist authentication; no plaintext fallback was written. Sign in again before retrying"
             ) from None
@@ -122,7 +168,11 @@ class CredentialStore:
         if self.load(provider, profile) is None:
             return False
         try:
-            self.backend.delete_password(SERVICE, f"{provider}:{profile}")
+            account = f"{provider}:{profile}"
+            raw = self.backend.get_password(SERVICE, account)
+            services = self._chunk_services(account, json.loads(raw))
+            self.backend.delete_password(SERVICE, account)
+            self._cleanup_chunks(account, services)
             return True
         except Exception:  # noqa: BLE001 - redact native backend errors
             raise AuthError(

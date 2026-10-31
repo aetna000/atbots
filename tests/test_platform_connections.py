@@ -1,5 +1,7 @@
 import json
+import sys
 import time
+import uuid
 
 import pytest
 
@@ -77,6 +79,64 @@ def test_secret_errors_are_redacted_and_invalid_refs_fail(tmp_path, monkeypatch,
     with pytest.raises(ValueError, match="unsupported"):
         SignIns(connections).start("anthropic")
     assert "secret" not in json.dumps(connections.list())
+
+
+def test_windows_large_api_key_roundtrip_and_failed_replacement(monkeypatch):
+    values = {}
+    class Backend:
+        __module__ = "keyring.backends.Windows"
+        fail = False
+
+        def get_password(self, service, profile):
+            return values.get((service, profile))
+
+        def set_password(self, service, profile, value):
+            assert len(value.encode("utf-16-le")) <= 2560
+            if self.fail and service == module.KEY_SERVICE:
+                raise RuntimeError("secret")
+            values[service, profile] = value
+
+        def delete_password(self, service, profile):
+            del values[service, profile]
+
+    backend = Backend()
+    class Vault(module.CredentialStore):
+        def __init__(self):
+            self.backend = backend
+
+    monkeypatch.setattr(module, "CredentialStore", Vault)
+    keys = APIKeys()
+    profile = "key-" + "a" * 32
+    original = "x" * 8000
+    keys.save(profile, original)
+    assert keys.load(profile) == original
+    old = values.copy()
+    backend.fail = True
+    with pytest.raises(AuthError):
+        keys.save(profile, "replacement-key")
+    assert values == old
+    backend.fail = False
+    keys.save(profile, "replacement-key")
+    assert keys.load(profile) == "replacement-key"
+    assert len(values) == 2
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows Credential Manager")
+def test_windows_real_credential_manager_large_synthetic_api_key():
+    keys = APIKeys()
+    assert type(keys.backend).__module__ == "keyring.backends.Windows"
+    profile = "key-" + uuid.uuid4().hex
+    value = "synthetic-" + "x" * 7900
+    try:
+        keys.save(profile, value)
+        assert keys.load(profile) == value
+    finally:
+        raw = keys.backend.get_password(module.KEY_SERVICE, profile)
+        if raw:
+            manifest = json.loads(raw)
+            services = module.CredentialStore._chunk_services(keys, profile, manifest)
+            keys.backend.delete_password(module.KEY_SERVICE, profile)
+            module.CredentialStore._cleanup_chunks(keys, profile, services)
 
 
 @pytest.mark.parametrize("succeeds", [True, False])
