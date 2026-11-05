@@ -1,3 +1,12 @@
+# Stable publication tasks — 2026-11-05
+
+- [x] Isolate main and incorporate the two qualified Windows credential fixes.
+- [x] Align 0.3.1 versions, stable AtSys minimum and current documentation.
+- [ ] Pass cross-platform source and Windows credential gates.
+- [ ] Pass wheel/sdist metadata and installed-artifact smoke.
+- [ ] Merge reviewed PR, tag, publish and verify PyPI/GitHub stable release.
+- [ ] Prepare the separate website PR for owner merge.
+
 # Release tasks
 
 ## Corrective 0.3.0b2 publication

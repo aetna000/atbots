@@ -1,3 +1,12 @@
+# Stable publication plan — 2026-11-05
+
+Use isolated origin/main plus the two existing Windows credential commits.
+Keep version 0.3.1 throughout package, installed smoke and current guides.
+Run the full source/cross-platform suites, actual Windows Credential Manager
+checks, build/metadata and fresh-wheel gates. Merge the reviewed PR after CI,
+tag the clean main commit, wait for Trusted Publishing, verify registry files,
+clean installation and stable GitHub release. No live provider calls required.
+
 # Release plan
 
 For the 2026-10-27 correction use an isolated `release/0.3.0b2` worktree based

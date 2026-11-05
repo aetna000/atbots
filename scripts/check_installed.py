@@ -14,7 +14,7 @@ import atbots
 from atbots.platform.session import AgentSession
 from atbots.platform.store import AgentStore
 
-assert atbots.__version__ == importlib.metadata.version("atbots") == "0.3.0b2"
+assert atbots.__version__ == importlib.metadata.version("atbots") == "0.3.1"
 assert "site-packages" in str(Path(atbots.__file__).resolve()), atbots.__file__
 resources = importlib.resources.files("atbots.platform")
 assert "Work and outcomes" in resources.joinpath("control-room.html").read_text()
@@ -23,7 +23,7 @@ for name in ("control-room.js", "control-room.css", "atsys-skill.md"):
     assert resources.joinpath(name).is_file(), name
 version = subprocess.run([sys.executable, "-m", "atbots.cli", "--version"],
                          check=True, text=True, capture_output=True)
-assert "0.3.0b2" in version.stdout
+assert "0.3.1" in version.stdout
 with tempfile.TemporaryDirectory(prefix="atbots-installed-") as directory:
     store = AgentStore(Path(directory) / "platform")
     definition = store.create("release-check")
@@ -45,5 +45,5 @@ with tempfile.TemporaryDirectory(prefix="atbots-installed-") as directory:
     )
     assert any(agent["name"] == definition.name for agent in json.loads(result.stdout))
 print(
-    "Installed AtBots beta: version, bundled resources, native test-model session and CLI passed."
+    "Installed AtBots: version, bundled resources, native test-model session and CLI passed."
 )

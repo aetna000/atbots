@@ -19,7 +19,7 @@ dependencies = [
   "APScheduler>=3.11,<4",
   "tzdata>=2025.1",
   "pydantic-ai-slim[anthropic]>=2.61,<3",
-  "atsys>=0.3.0b4,<0.4",
+  "atsys>=0.3.2,<0.4",
   "packaging>=24",
 ]
 
@@ -31,7 +31,7 @@ Issues = "https://github.com/aetna000/atbots/issues"
 [project.optional-dependencies]
 browser = ["playwright>=1.50,<2", "cryptography>=43", "pydantic-ai-slim[mcp]>=2.61,<3", "mcp>=2.3,<3"]
 schedule = ["APScheduler>=3.11,<4", "tzdata>=2025.1"]
-supervision = ["atsys>=0.3.0b4,<0.4", "packaging>=24"]
+supervision = ["atsys>=0.3.2,<0.4", "packaging>=24"]
 cloud = ["google-cloud-storage>=3,<4", "cryptography>=43", "APScheduler>=3.11,<4"]
 auth = [
   "pydantic-ai-slim[openai]>=2.61,<3",

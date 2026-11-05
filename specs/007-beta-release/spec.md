@@ -1,3 +1,14 @@
+# Stable publication — 2026-11-05
+
+The owner now authorizes a stable release. Publish AtBots 0.3.1, including the
+previously qualified Windows credential-storage fixes from 0969f30/ab68276.
+Preserve legacy data and unrelated dirty development files. Stable distribution
+does not mean every roadmap capability or provider is qualified. Existing
+limitations remain explicit. Publish PyPI and a stable GitHub release after
+cross-platform CI and installed-artifact gates pass. AtSys minimum is stable
+0.3.2; AtMem remains compatible >=2.3.10,<3. Website publication is separately
+owner-reviewed. The historical beta-only authorization below is superseded.
+
 # AtBots 0.3.0b1 beta publication
 
 ## Corrective beta 0.3.0b2 — 2026-10-27
