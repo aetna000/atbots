@@ -1,19 +1,19 @@
 # Your agents, under your control
 
-This guide describes the **0.3.0b2 beta**. The older 0.3.0b1 does not contain
+This guide describes the **0.3.1 stable**. The older 0.3.0b1 does not contain
 these UI corrections. Use Python 3.11+ and pip; a separate environment is recommended:
 
 ```sh
 python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install --upgrade 'atbots==0.3.0b2'
+python -m pip install --upgrade 'atbots==0.3.1'
 atbots
 ```
 
 The browser opens your control room. Setup itself does not need a running model.
 Installation does not download one or make a paid inference request.
-For browser-using agents, install `python -m pip install 'atbots[browser]==0.3.0b2'`
+For browser-using agents, install `python -m pip install 'atbots[browser]==0.3.1'`
 and `python -m playwright install chromium` before enabling browser permissions.
 Scheduling, provider authentication and the AtSys package are included in the base
 installation. The cloud extra is not needed for this local journey.

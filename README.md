@@ -4,20 +4,20 @@
 [Pydantic AI](https://ai.pydantic.dev) that ships with tasks, skills, and
 memory wired together, with a local UI and a Python library.
 
-**AtBots 0.3.0b2 beta:** [feature 006](specs/006-agent-control-room/spec.md)
+**AtBots 0.3.1 stable:** [feature 006](specs/006-agent-control-room/spec.md)
 defines persistent named agents, conversational terminal/web management, default
 AtMem memory, browser/workspace tools, schedules, optional AtFlows observability,
 AtSys supervision, and portable cloud deployment. This checkout includes native
 conversations, memory controls, durable jobs/approvals, browser/file/skill tools,
 schedules, the local web control room, integration adapters and encrypted cloud
 state/container tooling. Full cloud and multi-runtime acceptance remain pending;
-the corrected UI is included in `0.3.0b2`. The older
+the corrected UI is included in `0.3.1`. The older
 `0.3.0b1` does not include these fixes. See the [UI-first guide](docs/agent-platform.md) and
 [verification](specs/006-agent-control-room/corrective-verification-20261027.md) and
-[release notes](docs/releases/v0.3.0b2.md). The legacy
+[release notes](docs/releases/v0.3.1.md). The legacy
 quickstart below describes the earlier library API, not the new setup journey.
 
-For the corrected beta, open `atbots`, connect your providers in
+For the stable release, open `atbots`, connect your providers in
 **Setup & connections**, select **Control room model**, then choose **New agent**.
 Each agent gets private AtMem, a visible workspace, callable memory tools and
 built-in AtSys guidance. Configure its supervised roles in **Supervision**.
@@ -25,7 +25,7 @@ No model needs to be working just to configure the app. Closing a browser tab
 does not stop the local runner; idle agents make no model calls.
 
 ```bash
-python -m pip install --upgrade 'atbots==0.3.0b2'
+python -m pip install --upgrade 'atbots==0.3.1'
 atbots
 ```
 
@@ -93,11 +93,11 @@ change; tasks, skills, and tools are untouched.
 
 ## Account sign-in
 
-Account sign-in is included in the beta. The UI's Setup & connections is the
+Account sign-in is included in the stable release. The UI's Setup & connections is the
 recommended path. Equivalent terminal commands, in your Python environment:
 
 ```bash
-python -m pip install --upgrade 'atbots==0.3.0b2'
+python -m pip install --upgrade 'atbots==0.3.1'
 atbots auth login chatgpt
 atbots auth status chatgpt
 atbots auth logout chatgpt
